@@ -432,4 +432,4 @@ TESTPROGS = seek                                                        \
 TOOLS     = aviocat                                                     \
             ismindex                                                    \
             pktdumper                                                   \
-            probetest                                                   \
+            probetest
