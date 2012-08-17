@@ -489,10 +489,6 @@ enum AVCodecID {
 #endif
 };
 
-#if FF_API_CODEC_ID
-#define CodecID AVCodecID
-#endif
-
 /**
  * This struct describes the properties of a single codec described by an
  * AVCodecID.
