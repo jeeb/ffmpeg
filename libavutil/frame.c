@@ -429,8 +429,10 @@ int av_frame_copy_props(AVFrame *dst, const AVFrame *src)
     dst->pict_type           = src->pict_type;
     dst->sample_aspect_ratio = src->sample_aspect_ratio;
     dst->pts                 = src->pts;
+    dst->repeat_pict         = src->repeat_pict;
     dst->interlaced_frame    = src->interlaced_frame;
     dst->top_field_first     = src->top_field_first;
+    dst->palette_has_changed = src->palette_has_changed;
     dst->sample_rate         = src->sample_rate;
     dst->opaque              = src->opaque;
 #if FF_API_AVFRAME_LAVC
@@ -448,6 +450,7 @@ int av_frame_copy_props(AVFrame *dst, const AVFrame *src)
     dst->display_picture_number = src->display_picture_number;
     dst->decode_error_flags  = src->decode_error_flags;
 
+    memcpy(dst->error, src->error, sizeof(dst->error));
     av_dict_copy(&dst->metadata, src->metadata, 0);
 
     for (i = 0; i < src->nb_side_data; i++) {
