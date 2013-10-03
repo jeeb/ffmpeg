@@ -1603,8 +1603,10 @@ static int mov_skip_multiple_stsd(MOVContext *c, AVIOContext *pb,
         avio_skip(pb, size);
         return 1;
     }
-    if (codec_tag == AV_RL32("avc1"))
-        av_log(c->fc, AV_LOG_WARNING, "Concatenated H.264 might not play corrently.\n");
+    if (codec_tag == AV_RL32("avc1") ||
+        codec_tag == AV_RL32("hvc1") ||
+        codec_tag == AV_RL32("hev1"))
+        av_log(c->fc, AV_LOG_WARNING, "Concatenated H.264 or HEVC might not play corrently.\n");
 
     return 0;
 }
@@ -1669,7 +1671,7 @@ int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries)
             if (ret < 0)
                 return ret;
         }
-        /* this will read extra atoms at the end (wave, alac, damr, avcC, SMI ...) */
+        /* this will read extra atoms at the end (wave, alac, damr, avcC, hvcC, SMI ...) */
         a.size = size - (avio_tell(pb) - start_pos);
         if (a.size > 8) {
             if ((ret = mov_read_default(c, pb, a)) < 0)
@@ -2961,6 +2963,7 @@ static const MOVParseTableEntry mov_default_parse_table[] = {
 { MKTAG('s','b','g','p'), mov_read_sbgp },
 { MKTAG('u','u','i','d'), mov_read_uuid },
 { MKTAG('C','i','n', 0x8e), mov_read_targa_y216 },
+{ MKTAG('h','v','c','C'), mov_read_glbl },
 { 0, NULL }
 };
 
