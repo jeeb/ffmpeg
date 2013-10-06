@@ -349,6 +349,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { AV_CODEC_ID_G2M,          MKTAG('G', '2', 'M', '2') },
     { AV_CODEC_ID_G2M,          MKTAG('G', '2', 'M', '3') },
     { AV_CODEC_ID_G2M,          MKTAG('G', '2', 'M', '4') },
+    { AV_CODEC_ID_HEVC,         MKTAG('H', 'E', 'V', 'C') },
     { AV_CODEC_ID_NONE,         0 }
 };
 
