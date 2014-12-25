@@ -1091,7 +1091,7 @@ static int mkv_read_header(AVFormatContext *s)
       codec_id = ff_codec_get_id(ff_codec_bmp_tags, fourcc);
     } else if (!strcmp(info->CodecID, "A_MS/ACM") && info->CodecPrivateSize >= 14 && info->CodecPrivate != NULL) {
       ffio_init_context(&b, (uint8_t *)info->CodecPrivate, info->CodecPrivateSize, 0, NULL, NULL, NULL, NULL);
-      ret = ff_get_wav_header(&b, st->codec, info->CodecPrivateSize);
+      ret = ff_get_wav_header(&b, st->codec, info->CodecPrivateSize, 0);
       if (ret < 0)
         return ret;
       codec_id = st->codec->codec_id;
