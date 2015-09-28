@@ -78,6 +78,7 @@ OBJS-$(CONFIG_IIRFILTER)               += iirfilter.o
 OBJS-$(CONFIG_IMDCT15)                 += imdct15.o
 OBJS-$(CONFIG_INTRAX8)                 += intrax8.o intrax8dsp.o
 OBJS-$(CONFIG_IVIDSP)                  += ivi_dsp.o
+OBJS-$(CONFIG_JNI)                     += ffjni.o
 OBJS-$(CONFIG_JPEGTABLES)              += jpegtables.o
 OBJS-$(CONFIG_LIBXVID)                 += libxvid_rc.o
 OBJS-$(CONFIG_LLAUDDSP)                += lossless_audiodsp.o
@@ -935,6 +936,7 @@ SKIPHEADERS                            += %_tablegen.h                  \
 
 SKIPHEADERS-$(CONFIG_D3D11VA)          += d3d11va.h dxva2_internal.h
 SKIPHEADERS-$(CONFIG_DXVA2)            += dxva2.h dxva2_internal.h
+SKIPHEADERS-$(CONFIG_JNI)              += ffjni.h
 SKIPHEADERS-$(CONFIG_LIBSCHROEDINGER)  += libschroedinger.h
 SKIPHEADERS-$(CONFIG_LIBUTVIDEO)       += libutvideo.h
 SKIPHEADERS-$(CONFIG_LIBVPX)           += libvpx.h
