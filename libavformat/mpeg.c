@@ -29,6 +29,10 @@
 # include "libavutil/opt.h"
 #endif
 
+#if CONFIG_OMA_DEMUXER
+#include "oma.h"
+#endif
+
 #include "libavutil/avassert.h"
 
 /*********************************************/
@@ -128,6 +132,7 @@ typedef struct MpegDemuxContext {
     int sofdec;
     int dvd;
     int imkh_cctv;
+    int sony_psmf;
 #if CONFIG_VOBSUB_DEMUXER
     AVFormatContext *sub_ctx;
     FFDemuxSubtitlesQueue q[32];
@@ -149,6 +154,9 @@ static int mpegps_read_header(AVFormatContext *s)
         m->imkh_cctv = 1;
     } else if (!memcmp("Sofdec", buffer, 6)) {
         m->sofdec = 1;
+    } else if (!memcmp("PSMF", buffer, 4)) {
+        av_log(s, AV_LOG_ERROR, "PSMF desu!");
+        m->sony_psmf = 1;
     } else
        avio_seek(s->pb, last_pos, SEEK_SET);
 
@@ -441,8 +449,11 @@ redo:
         goto redo;
     }
 
-    if (startcode == PRIVATE_STREAM_1) {
+    // In case of Sony PSMF, Private Stream 1 is used for ATRAC3,
+    // thus we cannot skip it.
+    if (startcode == PRIVATE_STREAM_1 /* && !m->sony_psmf*/) {
         startcode = avio_r8(s->pb);
+        av_log(s, AV_LOG_WARNING, "PS1 ID: %d\n", startcode);
         len--;
     }
     if (len < 0)
@@ -482,7 +493,7 @@ redo:
     if (len < 0)
         return len;
 
-    if (startcode >= 0x80 && startcode <= 0xcf) {
+    if ((startcode >= 0x80 && startcode <= 0xcf) || !startcode && m->sony_psmf) {
         if (len < 4)
             goto skip;
 
@@ -586,6 +597,17 @@ redo:
     } else if (startcode >= 0xfd55 && startcode <= 0xfd5f) {
         type     = AVMEDIA_TYPE_VIDEO;
         codec_id = AV_CODEC_ID_VC1;
+#define ATRAC3_HEADER_LENGTH 8
+    } else if (m->sony_psmf && !startcode && len >= (lpcm_header_len + ATRAC3_HEADER_LENGTH)) {
+        av_log(s, AV_LOG_WARNING, "We have entered this audio piece of code\n");
+        codec_id = AV_CODEC_ID_ATRAC3P;
+        type     = AVMEDIA_TYPE_AUDIO;
+
+        if (lpcm_header_len)
+            avio_skip(s->pb, lpcm_header_len);
+
+        // uint16_t hdr_id       = avio_rb16(s->pb);
+        // uint16_t atrac_config = avio_rb16(s->pb);
     } else {
 skip:
         /* skip packet */
