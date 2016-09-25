@@ -170,8 +170,17 @@ typedef struct MXFDescriptor {
     UID codec_ul;
     AVRational sample_rate;
     AVRational aspect_ratio;
-    int width;
-    int height; /* Field height, not frame height */
+    /* In case of frame_layout == SeparateFields or SegmentedFrame, height is of field, not frame */
+    uint32_t stored_width;
+    uint32_t stored_height;
+    uint32_t sampled_width;
+    uint32_t sampled_height;
+    int32_t  sampled_x_offset;
+    int32_t  sampled_y_offset;
+    uint32_t display_width;
+    uint32_t display_height;
+    int32_t  display_x_offset;
+    int32_t  display_y_offset;
     int frame_layout; /* See MXFFrameLayout enum */
 #define MXF_TFF 1
 #define MXF_BFF 2
@@ -988,10 +997,34 @@ static int mxf_read_generic_descriptor(void *arg, AVIOContext *pb, int tag, int 
         avio_read(pb, descriptor->essence_codec_ul, 16);
         break;
     case 0x3203:
-        descriptor->width = avio_rb32(pb);
+        descriptor->stored_width = avio_rb32(pb);
         break;
     case 0x3202:
-        descriptor->height = avio_rb32(pb);
+        descriptor->stored_height = avio_rb32(pb);
+        break;
+    case 0x3205:
+        descriptor->sampled_width = avio_rb32(pb);
+        break;
+    case 0x3204:
+        descriptor->sampled_height = avio_rb32(pb);
+        break;
+    case 0x3206:
+        descriptor->sampled_x_offset = avio_rb32(pb);
+        break;
+    case 0x3207:
+        descriptor->sampled_y_offset = avio_rb32(pb);
+        break;
+    case 0x3209:
+        descriptor->display_width = avio_rb32(pb);
+        break;
+    case 0x3208:
+        descriptor->display_height = avio_rb32(pb);
+        break;
+    case 0x320A:
+        descriptor->display_x_offset = avio_rb32(pb);
+        break;
+    case 0x320B:
+        descriptor->display_y_offset = avio_rb32(pb);
         break;
     case 0x320C:
         descriptor->frame_layout = avio_r8(pb);
@@ -2027,8 +2060,16 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
             container_ul = mxf_get_codec_ul(mxf_picture_essence_container_uls, essence_container_ul);
             if (st->codecpar->codec_id == AV_CODEC_ID_NONE)
                 st->codecpar->codec_id = container_ul->id;
-            st->codecpar->width = descriptor->width;
-            st->codecpar->height = descriptor->height; /* Field height, not frame height */
+
+            if (descriptor->stored_width > INT_MAX || descriptor->stored_height > INT_MAX) {
+                av_log(mxf->fc, AV_LOG_ERROR,
+                       "One or both of the descriptor's storage width/height values does not fit within an integer! "
+                       "(width=%"PRIu32", height=%"PRIu32")\n", descriptor->stored_width, descriptor->stored_height);
+                ret = AVERROR(AVERROR_PATCHWELCOME);
+                goto fail_and_free;
+            }
+            st->codecpar->width = descriptor->stored_width;
+            st->codecpar->height = descriptor->stored_height; /* Field height, not frame height */
             switch (descriptor->frame_layout) {
                 case FullFrame:
                     st->codecpar->field_order = AV_FIELD_PROGRESSIVE;
@@ -2057,6 +2098,13 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
                                               descriptor->field_dominance);
                     case 0: // we already have many samples with field_dominance == unknown
                         break;
+                    }
+                    if ((st->codecpar->height * 2) > INT_MAX) {
+                        av_log(mxf->fc, AV_LOG_ERROR,
+                               "Field height duplicated does not fit within an integer! (height*2=%"PRIu64")\n",
+                               ((uint64_t)st->codecpar->height) * 2);
+                        ret = AVERROR(AVERROR_PATCHWELCOME);
+                        goto fail_and_free;
                     }
                     /* Turn field height into frame height. */
                     st->codecpar->height *= 2;
