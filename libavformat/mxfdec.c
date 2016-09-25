@@ -2061,15 +2061,39 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
             if (st->codecpar->codec_id == AV_CODEC_ID_NONE)
                 st->codecpar->codec_id = container_ul->id;
 
-            if (descriptor->stored_width > INT_MAX || descriptor->stored_height > INT_MAX) {
+            if (descriptor->stored_width > INT_MAX || descriptor->stored_height > INT_MAX ||
+                descriptor->sampled_width > INT_MAX || descriptor->sampled_height > INT_MAX ||
+                descriptor->display_width > INT_MAX || descriptor->display_height > INT_MAX) {
                 av_log(mxf->fc, AV_LOG_ERROR,
-                       "One or both of the descriptor's storage width/height values does not fit within an integer! "
-                       "(width=%"PRIu32", height=%"PRIu32")\n", descriptor->stored_width, descriptor->stored_height);
+                       "One or more of the descriptor's storage width/height values does not fit within an integer:\n"
+                       "(stored_width=%"PRIu32", stored_height=%"PRIu32")\n"
+                       "(sampled_width=%"PRIu32", sampled_height=%"PRIu32")\n"
+                       "(display_width=%"PRIu32", display_height=%"PRIu32")\n",
+                       descriptor->stored_width, descriptor->stored_height,
+                       descriptor->sampled_width, descriptor->sampled_height,
+                       descriptor->display_width, descriptor->display_height);
                 ret = AVERROR(AVERROR_PATCHWELCOME);
                 goto fail_and_free;
             }
             st->codecpar->width = descriptor->stored_width;
             st->codecpar->height = descriptor->stored_height; /* Field height, not frame height */
+
+            /*
+               Widths and heights get overridden storage->sampled->display.
+               In case of an unset value the previous value shall be used.
+            */
+            if (descriptor->sampled_width)
+                st->codecpar->width = descriptor->sampled_width;
+
+            if (descriptor->display_width)
+                st->codecpar->width = descriptor->display_width;
+
+            if (descriptor->sampled_height)
+                st->codecpar->height = descriptor->sampled_height;
+
+            if (descriptor->display_height)
+                st->codecpar->height = descriptor->display_height;
+
             switch (descriptor->frame_layout) {
                 case FullFrame:
                     st->codecpar->field_order = AV_FIELD_PROGRESSIVE;
