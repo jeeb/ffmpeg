@@ -51,6 +51,7 @@ version <next>:
 - asubcut filter
 - Microsoft Paint (MSP) version 2 decoder
 - Microsoft Paint (MSP) demuxer
+- TTML subtitle encoder and muxer
 
 
 version 4.3:
