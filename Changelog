@@ -56,6 +56,7 @@ version <next>:
 - shufflepixels filter
 - tmidequalizer filter
 - estdif filter
+- TTML subtitle encoder and muxer
 
 
 version 4.3:
