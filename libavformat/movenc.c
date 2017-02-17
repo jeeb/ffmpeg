@@ -4784,7 +4784,8 @@ static int check_pkt(AVFormatContext *s, AVPacket *pkt)
         ref = pkt->dts; // Skip tests for the first packet
 
     duration = pkt->dts - ref;
-    if (pkt->dts < ref || duration >= INT_MAX) {
+    if (!(mov->flags & FF_MOV_FLAG_NEGATIVE_CTS_OFFSETS) &&
+        (pkt->dts < ref || duration >= INT_MAX)) {
         av_log(s, AV_LOG_ERROR, "Application provided duration: %"PRId64" / timestamp: %"PRId64" is out of range for mov/mp4 format\n",
             duration, pkt->dts
         );
