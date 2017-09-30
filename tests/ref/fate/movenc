@@ -15,12 +15,12 @@ write_data len 110, time nopts, type trailer atom -
 c184e168ac1e5bb3d9c70e580ab6179c 3683 non-empty-moov-no-elst
 write_data len 20, time nopts, type header atom ftyp
 write_data len 1171, time nopts, type header atom -
-write_data len 728, time 0, type sync atom moof
+write_data len 728, time 46440, type sync atom moof
 write_data len 828, time nopts, type unknown atom -
 write_data len 728, time 1046439, type sync atom moof
 write_data len 812, time nopts, type unknown atom -
 write_data len 148, time nopts, type trailer atom -
-49bf122c4c732a344ef68b58acd19be5 4435 ismv
+20427fca92df0fd15a425c9fa4226381 4435 ismv
 write_data len 36, time nopts, type header atom ftyp
 write_data len 1123, time nopts, type header atom -
 write_data len 796, time 0, type sync atom moof

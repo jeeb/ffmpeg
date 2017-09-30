@@ -5201,6 +5201,7 @@ int ff_mov_write_packet(AVFormatContext *s, AVPacket *pkt)
     }
 
     if (!trk->entry && trk->start_dts == AV_NOPTS_VALUE && !mov->use_editlist &&
+        mov->mode != MODE_ISM &&
         s->avoid_negative_ts == AVFMT_AVOID_NEG_TS_MAKE_ZERO) {
         /* Not using edit lists and shifting the first track to start from zero.
          * If the other streams start from a later timestamp, we won't be able
