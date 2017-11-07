@@ -218,6 +218,39 @@ static void reconfig_encoder(AVCodecContext *ctx, const AVFrame *frame)
         x4->params.rc.f_rf_constant_max = x4->crf_max;
         x264_encoder_reconfig(x4->enc, &x4->params);
     }
+
+    /* Colorspace stuff */
+    if (frame->colorspace != AVCOL_SPC_UNSPECIFIED &&
+        x4->params.vui.i_colmatrix != frame->colorspace) {
+        x4->params.vui.i_colmatrix = frame->colorspace;
+        x264_encoder_reconfig(x4->enc, &x4->params);
+        av_log(ctx, AV_LOG_VERBOSE,
+               "Updated color space to '%s' (%s)\n",
+               av_color_space_name(frame->colorspace),
+               !x264_encoder_reconfig(x4->enc, &x4->params) ?
+               "success" : "failure");
+    }
+
+    if (frame->color_primaries != AVCOL_PRI_UNSPECIFIED &&
+        x4->params.vui.i_colorprim != frame->color_primaries) {
+        x4->params.vui.i_colorprim = frame->color_primaries;
+        av_log(ctx, AV_LOG_VERBOSE,
+               "Updated color primaries to '%s' (%s)\n",
+               av_color_primaries_name(frame->color_primaries),
+               !x264_encoder_reconfig(x4->enc, &x4->params) ?
+               "success" : "failure");
+    }
+
+    if (frame->color_trc != AVCOL_TRC_UNSPECIFIED &&
+        x4->params.vui.i_transfer != frame->color_trc) {
+        x4->params.vui.i_transfer = frame->color_trc;
+        x264_encoder_reconfig(x4->enc, &x4->params);
+        av_log(ctx, AV_LOG_VERBOSE,
+               "Updated color transfer to '%s' (%s)\n",
+               av_color_transfer_name(frame->color_trc),
+               !x264_encoder_reconfig(x4->enc, &x4->params) ?
+               "success" : "failure");
+    }
   }
 
     side_data = av_frame_get_side_data(frame, AV_FRAME_DATA_STEREO3D);
