@@ -36,6 +36,7 @@
 #include "internal.h"
 #include "mediacodec_wrapper.h"
 #include "mediacodecdec_common.h"
+#include "hwaccel.h"
 
 typedef struct MediaCodecH264DecContext {
 
