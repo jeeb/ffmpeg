@@ -71,7 +71,7 @@ static int aom_decode(AVCodecContext *avctx, void *data, int *got_frame,
     struct aom_image *img;
     int ret;
 
-    if (aom_codec_decode(&ctx->decoder, avpkt->data, avpkt->size, NULL, 0) !=
+    if (aom_codec_decode(&ctx->decoder, avpkt->data, avpkt->size, NULL) !=
         AOM_CODEC_OK) {
         const char *error  = aom_codec_error(&ctx->decoder);
         const char *detail = aom_codec_error_detail(&ctx->decoder);
