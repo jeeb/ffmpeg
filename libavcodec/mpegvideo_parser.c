@@ -63,7 +63,7 @@ static void mpegvideo_extract_headers(AVCodecParserContext *s,
                 s->output_picture_number = (buf[0] << 2) | (buf[1] >> 6);
                 s->pict_type = (buf[1] >> 3) & 7;
                 if (bytes_left >= 4)
-                vbv_delay = ((buf[1] & 0x07) << 13) | (buf[2] << 5) | (buf[3]  >> 3);
+                    vbv_delay = ((buf[1] & 0x07) << 13) | (buf[2] << 5) | (buf[3] >> 3);
             }
             break;
         case SEQ_START_CODE:
