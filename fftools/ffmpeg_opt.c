@@ -1153,7 +1153,18 @@ static int open_input_file(OptionsContext *o, const char *filename)
     f->start_time = o->start_time;
     f->recording_time = o->recording_time;
     f->input_ts_offset = o->input_ts_offset;
-    f->ts_offset  = o->input_ts_offset - (copy_ts ? (start_at_zero && ic->start_time != AV_NOPTS_VALUE ? ic->start_time : 0) : timestamp);
+
+    if (o->input_ts_start) {
+        if (o->input_ts_offset)
+            av_log(NULL, AV_LOG_WARNING,
+                   "Utilizing itsoffset together with its_start_point. "
+                   "Ignoring itsoffset.\n");
+
+        f->set_start_time = o->input_ts_start;
+        f->ts_offset = o->input_ts_start - (ic->start_time != AV_NOPTS_VALUE ? ic->start_time : 0);
+    } else {
+        f->ts_offset  = o->input_ts_offset - (copy_ts ? (start_at_zero && ic->start_time != AV_NOPTS_VALUE ? ic->start_time : 0) : timestamp);
+    }
     f->nb_streams = ic->nb_streams;
     f->rate_emu   = o->rate_emu;
     f->accurate_seek = o->accurate_seek;
@@ -3350,6 +3361,9 @@ const OptionDef options[] = {
     { "itsscale",       HAS_ARG | OPT_DOUBLE | OPT_SPEC |
                         OPT_EXPERT | OPT_INPUT,                      { .off = OFFSET(ts_scale) },
         "set the input ts scale", "scale" },
+    { "its_start_point",      HAS_ARG | OPT_TIME | OPT_OFFSET |
+                        OPT_EXPERT | OPT_INPUT,                      { .off = OFFSET(input_ts_start) },
+        "set the input ts start point", "time_off" },
     { "timestamp",      HAS_ARG | OPT_PERFILE | OPT_OUTPUT,          { .func_arg = opt_recording_timestamp },
         "set the recording timestamp ('now' to set the current time)", "time" },
     { "metadata",       HAS_ARG | OPT_STRING | OPT_SPEC | OPT_OUTPUT, { .off = OFFSET(metadata) },

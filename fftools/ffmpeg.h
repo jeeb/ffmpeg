@@ -116,6 +116,7 @@ typedef struct OptionsContext {
 
     /* input options */
     int64_t input_ts_offset;
+    int64_t input_ts_start;
     int loop;
     int rate_emu;
     int accurate_seek;
@@ -402,6 +403,7 @@ typedef struct InputFile {
     int64_t input_ts_offset;
 
     int64_t ts_offset;
+    int64_t set_start_time;
     int64_t last_ts;
     int64_t start_time;   /* user-specified start time in AV_TIME_BASE or AV_NOPTS_VALUE */
     int seek_timestamp;
