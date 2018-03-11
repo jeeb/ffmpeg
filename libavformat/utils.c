@@ -815,8 +815,41 @@ static int update_wrap_reference(AVFormatContext *s, AVStream *st, int stream_in
         while (program) {
             if (program->pts_wrap_reference != pts_wrap_reference) {
                 for (i = 0; i<program->nb_stream_indexes; i++) {
-                    s->streams[program->stream_index[i]]->pts_wrap_reference = pts_wrap_reference;
-                    s->streams[program->stream_index[i]]->pts_wrap_behavior = pts_wrap_behavior;
+                    int64_t *stream_pts_wrap_reference = &(s->streams[program->stream_index[i]]->pts_wrap_reference);
+                    int     *stream_pts_wrap_behavior  = &(s->streams[program->stream_index[i]]->pts_wrap_behavior);
+
+                    if (*stream_pts_wrap_reference != AV_NOPTS_VALUE &&
+                        (*stream_pts_wrap_reference - pts_wrap_reference > 1ULL << (st->pts_wrap_bits - 3) ||
+                         *stream_pts_wrap_reference < pts_wrap_reference)) {
+                        /*
+                         * If we find a defined wrap reference that is
+                         * considerably larger, or that is smaller than the
+                         * current default wrap reference, we update
+                         * the default to current stream's wrap reference.
+                         */
+                        av_log(s, AV_LOG_DEBUG,
+                               "Updating default PTS wrap reference "
+                               "%"PRId64" and PTS wrap behavior %d to "
+                               "stream PTS wrap reference %"PRId64" and "
+                               "PTS wrap behavior %d (program: %d, stream:%d, "
+                               "stream_id: %d)\n", pts_wrap_reference,
+                               pts_wrap_behavior,
+                               *stream_pts_wrap_reference,
+                               *stream_pts_wrap_behavior,
+                               program->id, program->stream_index[i],
+                               s->streams[program->stream_index[i]]->id);
+
+                        pts_wrap_reference = *stream_pts_wrap_reference;
+                        pts_wrap_behavior  = *stream_pts_wrap_behavior;
+                    } else {
+                        /*
+                         * Otherwise, we just utilize and override the
+                         * stream's wrap-around reference with the default
+                         * wrap-around reference.
+                         */
+                        *stream_pts_wrap_reference = pts_wrap_reference;
+                        *stream_pts_wrap_behavior  = pts_wrap_behavior;
+                    }
                 }
 
                 program->pts_wrap_reference = pts_wrap_reference;
