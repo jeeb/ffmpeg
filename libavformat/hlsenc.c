@@ -1386,7 +1386,8 @@ static int hls_window(AVFormatContext *s, int last, VariantStream *vs)
 
     for (en = vs->segments; en; en = en->next) {
         if (target_duration <= en->duration)
-            target_duration = lrint(en->duration);
+            /* Target duration has to always be exactly or longer than any segment */
+            target_duration = ceil(en->duration);
     }
 
     vs->discontinuity_set = 0;
