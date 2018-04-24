@@ -56,6 +56,14 @@
         (prev_dividend) = (dividend);                                          \
     } while (0)
 
+enum MpegTSMode {
+    MPEGTS_MODE_AUTO,
+    MPEGTS_MODE_DVB,
+    MPEGTS_MODE_ATSC,
+    MPEGTS_MODE_ARIB,
+    MPEGTS_MODE_NB,
+};
+
 enum MpegTSFilterType {
     MPEGTS_PES,
     MPEGTS_SECTION,
@@ -154,6 +162,8 @@ struct MpegTSContext {
     int resync_size;
     int merge_pmt_versions;
 
+    enum MpegTSMode demux_mode;
+
     /******************************************/
     /* private mpegts data */
     /* scan context */
@@ -186,6 +196,17 @@ static const AVOption options[] = {
      {.i64 = 0}, 0, 1, 0 },
     {"skip_clear", "skip clearing programs", offsetof(MpegTSContext, skip_clear), AV_OPT_TYPE_BOOL,
      {.i64 = 0}, 0, 1, 0 },
+    {"mpegts_mode", "MPEG-TS demuxing mode", offsetof(MpegTSContext, demux_mode),
+     AV_OPT_TYPE_INT, {.i64 = MPEGTS_MODE_AUTO}, 0, MPEGTS_MODE_NB-1,
+     AV_OPT_FLAG_DECODING_PARAM, "demux_mode"},
+        {"auto", "auto mode", 0, AV_OPT_TYPE_CONST, {.i64 = MPEGTS_MODE_AUTO},
+         INT_MIN, INT_MAX, AV_OPT_FLAG_DECODING_PARAM, "demux_mode"},
+        {"dvb",  "DVB mode",  0, AV_OPT_TYPE_CONST, {.i64 = MPEGTS_MODE_DVB},
+         INT_MIN, INT_MAX, AV_OPT_FLAG_DECODING_PARAM, "demux_mode"},
+        {"atsc", "ATSC mode", 0, AV_OPT_TYPE_CONST, {.i64 = MPEGTS_MODE_ATSC},
+         INT_MIN, INT_MAX, AV_OPT_FLAG_DECODING_PARAM, "demux_mode"},
+        {"arib", "ARIB mode", 0, AV_OPT_TYPE_CONST, {.i64 = MPEGTS_MODE_ARIB},
+         INT_MIN, INT_MAX, AV_OPT_FLAG_DECODING_PARAM, "demux_mode"},
     { NULL },
 };
 
