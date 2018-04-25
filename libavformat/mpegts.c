@@ -2218,6 +2218,7 @@ static void pmt_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
     int desc_list_len;
     uint32_t prog_reg_desc = 0; /* registration descriptor */
     int stream_identifier = -1;
+    unsigned int arib_score = 0;
 
     int mp4_descr_count = 0;
     Mp4Descr mp4_descr[MAX_MP4_DESCR_COUNT] = { { 0 } };
@@ -2279,9 +2280,26 @@ static void pmt_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
         } else if (tag == 0x05 && len >= 4) { // registration descriptor
             prog_reg_desc = bytestream_get_le32(&p);
             len -= 4;
+        } else if (tag == 0x09 && len >= 4) { // CA system ID
+            uint16_t ca_system_id = bytestream_get_be16(&p);
+            av_log(ts, AV_LOG_VERBOSE, "CA System ID 0x%x\n",
+                   ca_system_id);
+            len -= 2;
+
+            arib_score |= (ca_system_id == 0x05);
+        } else if (tag == 0xc1) {
+            arib_score |= 1 << 1;
+        } else if (tag == 0xf6) {
+            arib_score |= 1 << 2;
         }
         p += len;
     }
+
+    if (ts->demux_mode == MPEGTS_MODE_AUTO && arib_score == 0x07) { // 0b111
+        av_log(ts, AV_LOG_INFO, "ARIB system probed by PMT\n");
+        ts->demux_mode = MPEGTS_MODE_ARIB;
+    }
+
     p += program_info_length;
     if (p >= p_end)
         goto out;
