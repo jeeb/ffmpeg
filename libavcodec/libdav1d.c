@@ -27,12 +27,13 @@
 typedef struct Dav1dDecContext {
     void *decoder;
 
+
     AVFrame *frame;
     Dav1dContext *dec_ctx;
     Dav1dSettings dec_settings;
 } Dav1dDecContext;
 
-static int dav1d_to_avframe_params(AVFrame *frame, Dav1dPicture *picture)
+static int dav1d_to_avframe_params(AVCodecContext *avctx, AVFrame *frame, Dav1dPicture *picture)
 {
     Dav1dPictureParameters params = picture->p;
 
@@ -80,10 +81,12 @@ static int dav1d_to_avframe_params(AVFrame *frame, Dav1dPicture *picture)
         break;
     };
 
+    avctx->pix_fmt = frame->format;
+
     frame->width  = params.w;
     frame->height = params.h;
 
-    frame->color_range = params.fullrange ? AVCOL_RANGE_JPEG : AVCOL_RANGE_MPEG;
+    avctx->color_range = frame->color_range = params.fullrange ? AVCOL_RANGE_JPEG : AVCOL_RANGE_MPEG;
 
     return 0;
 }
@@ -122,7 +125,7 @@ static int libdav1d_decode(AVCodecContext *avctx, void *data,
 
     // dav1d_data_create(Dav1dData *const buf, const size_t sz)
     Dav1dData data_pkt;
-    Dav1dPicture picture;
+    Dav1dPicture *picture;
     AVFrame *frame = data;
     int ret = -1;
 
@@ -132,17 +135,20 @@ static int libdav1d_decode(AVCodecContext *avctx, void *data,
         return AVERROR_EOF;
     }
 
+    picture = av_mallocz(sizeof(Dav1dPicture));
+
     memcpy(data_pkt.data, avpkt->data, avpkt->size);
 
     // dav1d_decode(Dav1dContext *c, Dav1dData *in, Dav1dPicture *out)
-    ret = dav1d_decode(ctx->dec_ctx, &data_pkt, &picture);
+    ret = dav1d_decode(ctx->dec_ctx, &data_pkt, picture);
     if (ret == -EAGAIN)
         return AVERROR(EAGAIN);
     else if (ret < 0) {
         return AVERROR_EXTERNAL;
     }
 
-    if ((ret = dav1d_to_avframe_params(frame, &picture)) < 0) {
+    ret = dav1d_to_avframe_params(avctx, frame, picture);
+    if (ret < 0) {
         av_log(avctx, AV_LOG_ERROR, "Failure in converting dav1d params to AVFrame params (ret=%d)\n", ret);
         return AVERROR_INVALIDDATA;
     }
@@ -152,13 +158,13 @@ static int libdav1d_decode(AVCodecContext *avctx, void *data,
         return AVERROR(ENOMEM);
     }
 
-    planes[0] = picture.data[0];
-    planes[1] = picture.data[1];
-    planes[2] = picture.data[2];
+    planes[0] = picture->data[0];
+    planes[1] = picture->data[1];
+    planes[2] = picture->data[2];
     planes[3] = NULL;
-    linesizes[0] = picture.stride[0];
-    linesizes[1] = picture.stride[1];
-    linesizes[2] = picture.stride[1];
+    linesizes[0] = picture->stride[0];
+    linesizes[1] = picture->stride[1];
+    linesizes[2] = picture->stride[1];
     linesizes[3] = 0;
 
     av_image_copy(frame->data, frame->linesize, (const uint8_t**)planes,
