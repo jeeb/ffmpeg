@@ -2125,6 +2125,13 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
             st->codecpar->codec_id   = AV_CODEC_ID_ARIB_CAPTION;
             st->codecpar->profile    = picked_profile;
             st->request_probe        = 0;
+
+            if (ts->demux_mode == MPEGTS_MODE_AUTO) {
+                av_log(ts, AV_LOG_VERBOSE,
+                       "ARIB system detected by receipt of an ARIB captions "
+                       "track.\n");
+                ts->demux_mode = MPEGTS_MODE_ARIB;
+            }
         }
         break;
     default:
