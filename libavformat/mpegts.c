@@ -41,6 +41,11 @@
 #include <iconv.h>
 #endif
 
+#if CONFIG_LIBARIBB24
+#include <aribb24/aribb24.h>
+#include <aribb24/decoder.h>
+#endif
+
 /* maximum size in which we look for synchronization if
  * synchronization is lost */
 #define MAX_RESYNC_SIZE 65536
@@ -164,6 +169,10 @@ struct MpegTSContext {
 
     enum MpegTSMode demux_mode;
 
+#if CONFIG_LIBARIBB24
+    arib_instance_t *arib_helper_instance;
+#endif
+
     /******************************************/
     /* private mpegts data */
     /* scan context */
@@ -276,6 +285,33 @@ typedef struct PESContext {
 } PESContext;
 
 extern AVInputFormat ff_mpegts_demuxer;
+
+#if CONFIG_LIBARIBB24
+// decode JIS 8-bit character to UTF-8 characters.
+static char* decode_aribstring( arib_instance_t *p_instance, const unsigned char *psz_instring)
+{
+    if( !psz_instring )
+    {
+        return NULL;
+    }
+    size_t i_in = strlen( (const char*)psz_instring );
+
+    arib_decoder_t *p_decoder = arib_get_decoder( p_instance );
+    if ( !p_decoder )
+        return NULL;
+
+    size_t i_out = i_in * 4;
+    char *psz_outstring = (char*) calloc( i_out + 1, sizeof(char) );
+
+    arib_initialize_decoder( p_decoder );
+    i_out = arib_decode_buffer( p_decoder,
+            psz_instring, i_in,
+            psz_outstring, i_out );
+    arib_finalize_decoder( p_decoder );
+
+    return psz_outstring;
+}
+#endif
 
 static struct Program * get_program(MpegTSContext *ts, unsigned int programid)
 {
@@ -2581,6 +2617,17 @@ static void sdt_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
                     break;
                 name = getstr8(&p, p_end);
                 if (name) {
+#if CONFIG_LIBARIBB24
+                    char *arib_name = NULL;
+
+                    if (ts->demux_mode == MPEGTS_MODE_ARIB &&
+                        (arib_name = decode_aribstring(ts->arib_helper_instance,
+                                                       name))) {
+                        av_free(name);
+                        name = arib_name;
+                    }
+#endif
+
                     AVProgram *program = av_new_program(ts->stream, sid);
                     if (program) {
                         av_dict_set(&program->metadata, "service_name", name, 0);
@@ -2983,6 +3030,13 @@ static int mpegts_read_header(AVFormatContext *s)
     int len;
     int64_t pos, probesize = s->probesize;
 
+#if CONFIG_LIBARIBB24
+    if (!(ts->arib_helper_instance = arib_instance_new(NULL))) {
+        av_log(s, AV_LOG_ERROR, "Failed to allocate ARIB helper!\n");
+        return AVERROR(ENOMEM);
+    }
+#endif
+
     s->internal->prefer_codec_framerate = 1;
 
     if (ffio_ensure_seekback(pb, probesize) < 0)
@@ -3176,6 +3230,9 @@ static void mpegts_free(MpegTSContext *ts)
 static int mpegts_read_close(AVFormatContext *s)
 {
     MpegTSContext *ts = s->priv_data;
+#if CONFIG_LIBARIBB24
+    arib_instance_destroy(ts->arib_helper_instance);
+#endif
     mpegts_free(ts);
     return 0;
 }
