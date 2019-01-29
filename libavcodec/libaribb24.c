@@ -209,15 +209,14 @@ static int libaribb24_handle_regions(AVCodecContext *avctx, AVSubtitle *sub)
     Libaribb24Context *b24 = avctx->priv_data;
     const arib_buf_region_t *region = arib_decoder_get_regions(b24->decoder);
     unsigned int profile_font_size = get_profile_font_size(avctx->profile);
-    AVBPrint buf = { 0 };
     int ret = 0;
-
-    av_bprint_init(&buf, 0, AV_BPRINT_SIZE_UNLIMITED);
+    unsigned int layer = 0;
 
     while (region) {
         ptrdiff_t region_length = region->p_end - region->p_start;
         unsigned int ruby_region =
             region->i_fontheight == (profile_font_size / 2);
+        AVBPrint buf = { 0 };
 
         // ASS requires us to make the colors BGR, so we convert here
         int foreground_bgr_color = RGB_TO_BGR(region->i_foreground_color);
@@ -232,6 +231,8 @@ static int libaribb24_handle_regions(AVCodecContext *avctx, AVSubtitle *sub)
         if (region_length == 0 || (ruby_region && b24->aribb24_skip_ruby)) {
             goto next_region;
         }
+
+        av_bprint_init(&buf, 0, AV_BPRINT_SIZE_UNLIMITED);
 
         // color and alpha
         if (foreground_bgr_color != ASS_DEFAULT_COLOR)
@@ -256,28 +257,33 @@ static int libaribb24_handle_regions(AVCodecContext *avctx, AVSubtitle *sub)
                                   profile_font_size));
         }
 
-        // TODO: positioning
+        // positioning
+        av_bprintf(&buf, "{\\an1\\pos(%d,%d)}",
+                   region->i_charleft, region->i_charbottom);
 
         av_bprint_append_data(&buf, region->p_start, region_length);
 
         av_bprintf(&buf, "{\\r}");
 
+        if (!av_bprint_is_complete(&buf))
+            ret = AVERROR(ENOMEM);
+
+        if (ret == 0) {
+            av_log(avctx, AV_LOG_DEBUG, "Styled ASS line: %s\n",
+                   buf.str);
+
+            ret = ff_ass_add_rect(sub, buf.str, b24->read_order++,
+                                  layer++, NULL, NULL);
+        }
+
+        av_bprint_finalize(&buf, NULL);
+
+        if (ret < 0)
+            break;
+
 next_region:
         region = region->p_next;
     }
-
-    if (!av_bprint_is_complete(&buf))
-        ret = AVERROR(ENOMEM);
-
-    if (ret == 0) {
-        av_log(avctx, AV_LOG_DEBUG, "Styled ASS line: %s\n",
-               buf.str);
-
-        ret = ff_ass_add_rect(sub, buf.str, b24->read_order++,
-                              0, NULL, NULL);
-    }
-
-    av_bprint_finalize(&buf, NULL);
 
     return ret;
 }
