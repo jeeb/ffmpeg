@@ -206,6 +206,9 @@ static void sub2video_copy_rect(uint8_t *dst, int dst_linesize, int w, int h,
         return;
     }
 
+    av_log(NULL, AV_LOG_WARNING, "sub2video: Copying a %dx%d (pos: %d, %d) subtitle rectangle to a %dx%d canvas\n",
+           r->w, r->h, r->x, r->y, w, h);
+
     dst += r->y * dst_linesize + r->x * 4;
     src = r->data[0];
     pal = (uint32_t *)r->data[1];
@@ -228,6 +231,11 @@ static void sub2video_push_ref(InputStream *ist, int64_t pts)
     av_assert1(frame->data[0]);
     ist->sub2video.last_pts = frame->pts = pts;
     for (i = 0; i < ist->nb_filters; i++) {
+        av_log(NULL, AV_LOG_WARNING, "sub2video: Pushing a %dx%d frame to '%s' with PTS %"PRId64"\n",
+               frame->width, frame->height,
+               ist->filters[i]->filter->name ? ist->filters[i]->filter->name : "<no identifier>",
+               pts);
+
         ret = av_buffersrc_add_frame_flags(ist->filters[i]->filter, frame,
                                            AV_BUFFERSRC_FLAG_KEEP_REF |
                                            AV_BUFFERSRC_FLAG_PUSH);
@@ -263,6 +271,11 @@ void sub2video_update(InputStream *ist, AVSubtitle *sub)
                "Impossible to get a blank canvas.\n");
         return;
     }
+
+    av_log(NULL, AV_LOG_WARNING, "sub2video: Update for stream %d, "
+                                 "(pts: %"PRId64", end_pts: %"PRId64", num_rects: %d)\n",
+           ist->st->index, pts, end_pts, num_rects);
+
     dst          = frame->data    [0];
     dst_linesize = frame->linesize[0];
     for (i = 0; i < num_rects; i++)
@@ -288,6 +301,12 @@ static void sub2video_heartbeat(InputStream *ist, int64_t pts)
         /* subtitles seem to be usually muxed ahead of other streams;
            if not, subtracting a larger time here is necessary */
         pts2 = av_rescale_q(pts, ist->st->time_base, ist2->st->time_base) - 1;
+
+        av_log(NULL, AV_LOG_WARNING, "sub2video: Heartbeat from stream %d (%s, PID: %d) "
+               "stream at PTS %"PRId64" (last_pts: %"PRId64", end_pts: %"PRId64").\n",
+               ist->st->index, av_get_media_type_string(ist->st->codecpar->codec_type),
+               ist->st->id, pts2, ist2->sub2video.last_pts, ist2->sub2video.end_pts);
+
         /* do not send the heartbeat frame if the subtitle is already ahead */
         if (pts2 <= ist2->sub2video.last_pts)
             continue;
@@ -296,8 +315,11 @@ static void sub2video_heartbeat(InputStream *ist, int64_t pts)
             sub2video_update(ist2, NULL);
         for (j = 0, nb_reqs = 0; j < ist2->nb_filters; j++)
             nb_reqs += av_buffersrc_get_nb_failed_requests(ist2->filters[j]->filter);
-        if (nb_reqs)
+        if (nb_reqs) {
+            av_log(NULL, AV_LOG_WARNING, "sub2video: Heartbeat found %d failed requests. Feeding filter chain again\n",
+                   nb_reqs);
             sub2video_push_ref(ist2, pts2);
+        }
     }
 }
 
