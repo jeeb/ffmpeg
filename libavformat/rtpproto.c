@@ -60,6 +60,8 @@ typedef struct RTPContext {
     char *sources;
     char *block;
     char *fec_options_str;
+    int64_t bitrate; /* number of bits to send per second */
+    int64_t burst_bits;
 } RTPContext;
 
 #define OFFSET(x) offsetof(RTPContext, x)
@@ -78,6 +80,8 @@ static const AVOption options[] = {
     { "sources",            "Source list",                                                      OFFSET(sources),         AV_OPT_TYPE_STRING, { .str = NULL },               .flags = D|E },
     { "block",              "Block list",                                                       OFFSET(block),           AV_OPT_TYPE_STRING, { .str = NULL },               .flags = D|E },
     { "fec",                "FEC",                                                              OFFSET(fec_options_str), AV_OPT_TYPE_STRING, { .str = NULL },               .flags = E },
+    { "bitrate",            "Bits to send per second",                                          OFFSET(bitrate),         AV_OPT_TYPE_INT64,  { .i64 = 0  },     0, INT64_MAX, .flags = E },
+    { "burst_bits",         "Max length of bursts in bits (when using bitrate)",                OFFSET(burst_bits),      AV_OPT_TYPE_INT64,  { .i64 = 0  },     0, INT64_MAX, .flags = E },
     { NULL }
 };
 
@@ -229,6 +233,7 @@ static int rtp_open(URLContext *h, const char *uri, int flags)
     const char *p;
     int i, max_retry_count = 3;
     int rtcpflags;
+    AVDictionary *udp_proto_options = NULL;
 
     av_url_split(NULL, 0, NULL, 0, hostname, sizeof(hostname), &rtp_port,
                  path, sizeof(path), uri);
@@ -281,6 +286,30 @@ static int rtp_open(URLContext *h, const char *uri, int flags)
         }
     }
 
+    // AVOptions to be passed to the UDP protocol
+    if (s->bitrate) {
+        int ret = av_dict_set_int(&udp_proto_options, "bitrate",
+                                  s->bitrate, 0);
+        if (ret < 0 || !udp_proto_options) {
+            av_log(h, AV_LOG_ERROR, "Failed to set the bitrate option for the "
+                                    "UDP protocol to value %"PRId64" "
+                                    "(error: %s)\n",
+                   s->bitrate, av_err2str(ret));
+            goto fail;
+        }
+    }
+    if (s->burst_bits) {
+        int ret = av_dict_set_int(&udp_proto_options,
+                                  "burst_bits", s->burst_bits, 0);
+        if (ret < 0 || !udp_proto_options) {
+            av_log(h, AV_LOG_ERROR, "Failed to set the burst_bits option for the "
+                                    "UDP protocol to value %"PRId64" "
+                                    "(error: %s)\n",
+                   s->burst_bits, av_err2str(ret));
+            goto fail;
+        }
+    }
+
     if (s->fec_options_str) {
         p = s->fec_options_str;
 
@@ -311,8 +340,15 @@ static int rtp_open(URLContext *h, const char *uri, int flags)
                       hostname, rtp_port, s->local_rtpport,
                       sources, block);
         if (ffurl_open_whitelist(&s->rtp_hd, buf, flags, &h->interrupt_callback,
-                                 NULL, h->protocol_whitelist, h->protocol_blacklist, h) < 0)
+                                 &udp_proto_options, h->protocol_whitelist, h->protocol_blacklist, h) < 0)
             goto fail;
+
+        if (udp_proto_options && av_dict_count(udp_proto_options)) {
+            av_log(h, AV_LOG_WARNING, "Failed to set %d AVOptions for the "
+                                      "underlying UDP protocol!\n",
+                                      av_dict_count(udp_proto_options));
+        }
+
         s->local_rtpport = ff_udp_get_local_port(s->rtp_hd);
         if(s->local_rtpport == 65535) {
             s->local_rtpport = -1;
@@ -369,6 +405,7 @@ static int rtp_open(URLContext *h, const char *uri, int flags)
         ffurl_close(s->rtcp_hd);
     ffurl_closep(&s->fec_hd);
     av_free(fec_protocol);
+    av_dict_free(&udp_proto_options);
     av_dict_free(&fec_opts);
     return AVERROR(EIO);
 }
