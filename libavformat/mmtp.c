@@ -24,9 +24,50 @@
 #include "avformat.h"
 #include "internal.h"
 
-enum TLVSyncBytes {
-    TLV_SYNC_BYTE = 0x7F,
+/* TLV definitions as in ITU-R BT.1869 */
+
+// 0b01 + six reserved bits all set to 1
+#define TLV_SYNC_BYTE 0x7F
+
+enum TLVPacketType {
+    TLV_PACKET_IPV4                 = 0x01,
+    TLV_PACKET_IPV6                 = 0x02,
+    TLV_PACKET_IP_HEADER_COMPRESSED = 0x03,
+    TLV_PACKET_SIGNALLING           = 0xFE,
+    TLV_PACKET_NULL                 = 0xFF,
 };
+
+struct TLVPacket {
+    enum TLVPacketType  pkt_type;
+    uint16_t            pkt_data_size;
+    uint8_t            *pkt_data;
+};
+
+enum TLVHCfBPacketType {
+    HCFB_FULL_HEADER_IPV4_AND_UDP = 0x20,
+    HCFB_COMP_HEADER_IPV4_AND_UDP = 0x21,
+    HCFB_FULL_HEADER_IPV6_AND_UDP = 0x60,
+    HCFB_COMP_HEADER_IPV6_AND_UDP = 0x61,
+};
+
+static int parse_hcfb_packet(AVFormatContext *ctx, struct TLVPacket *pkt)
+{
+    if (pkt->pkt_type != TLV_PACKET_IP_HEADER_COMPRESSED ||
+        pkt->pkt_data_size < 3)
+        return AVERROR_INVALIDDATA;
+
+    uint16_t cid_and_sn = AV_RB16(pkt->pkt_data);
+    uint8_t  cid_header_type = pkt->pkt_data[2];
+
+    uint16_t cid = (cid_and_sn & 0xfff0) >> 4;
+    uint8_t  sn  = cid_and_sn & 0x0f;
+
+    av_log(ctx, AV_LOG_VERBOSE, "HCfB packet with cid: %"PRIu16", "
+                                "sn: %"PRIu8", cid header type: 0x%"PRIx8"\n",
+           cid, sn, cid_header_type);
+
+    return 0;
+}
 
 static int tlv_resync(AVFormatContext *ctx)
 {
@@ -54,7 +95,10 @@ static int tlv_read_packet(AVFormatContext *ctx)
     AVIOContext *pb = ctx->pb;
     unsigned char tlv_header[4 + AV_INPUT_BUFFER_PADDING_SIZE] = { 0 };
     unsigned char packet_type = 0;
+    unsigned int skip_packet = 0;
+    int ret = -1;
     uint16_t packet_length = 0;
+    struct TLVPacket *tlv_packet = NULL;
     int len = avio_read(pb, tlv_header, 4);
     if (len != 4)
         return len < 0 ? len : AVERROR_EOF;
@@ -67,11 +111,13 @@ static int tlv_read_packet(AVFormatContext *ctx)
     packet_type = tlv_header[1];
 
     switch (packet_type) {
-    case 0x01:
-    case 0x02:
-    case 0x03:
-    case 0xFE:
-    case 0xFF:
+    case TLV_PACKET_IP_HEADER_COMPRESSED:
+        break;
+    case TLV_PACKET_IPV4:
+    case TLV_PACKET_IPV6:
+    case TLV_PACKET_SIGNALLING:
+    case TLV_PACKET_NULL:
+        skip_packet = 1;
         break;
     default:
         {
@@ -86,17 +132,98 @@ static int tlv_read_packet(AVFormatContext *ctx)
     av_log(ctx, AV_LOG_VERBOSE, "TLV packet of type %"PRIu8" and size %"PRIu16" found\n",
            packet_type, packet_length);
 
-    return 0;
+    if (!packet_length)
+        return 0;
+
+    if (skip_packet && packet_length) {
+        int64_t curr_pos      = avio_tell(pb);
+        int64_t post_skip_pos = avio_skip(pb, packet_length);
+        if (post_skip_pos != (packet_length + curr_pos))
+            return post_skip_pos < 0 ? post_skip_pos : AVERROR_EOF;
+    }
+
+    if (!(tlv_packet = av_mallocz(sizeof(struct TLVPacket)))) {
+        av_log(ctx, AV_LOG_ERROR, "Failed to allocate TLVPacket!\n");
+        return AVERROR(ENOMEM);
+    }
+
+    tlv_packet->pkt_type      = packet_type;
+    tlv_packet->pkt_data_size = packet_length;
+    if (!(tlv_packet->pkt_data =
+            av_mallocz(packet_length + AV_INPUT_BUFFER_PADDING_SIZE))) {
+        av_log(ctx, AV_LOG_ERROR, "Failed to allocate TLVPacket buffer!\n");
+        ret = AVERROR(ENOMEM);
+        goto tlv_packet_read_error;
+    }
+
+    len = avio_read(pb, tlv_packet->pkt_data, packet_length);
+    if (len != packet_length) {
+        ret = len < 0 ? len : AVERROR_EOF;
+        goto tlv_packet_read_error;
+    }
+
+    if ((ret = parse_hcfb_packet(ctx, tlv_packet)) < 0) {
+        goto tlv_packet_read_error;
+    }
+
+    ret = 0;
+
+tlv_packet_read_error:
+    if (tlv_packet) {
+        if (tlv_packet->pkt_data)
+            av_free(tlv_packet->pkt_data);
+
+        av_free(tlv_packet);
+    }
+
+    return ret;
 }
 
-static int mmtp_tlv_probe(AVProbeData *p)
+static int mmtp_tlv_probe(AVProbeData *data)
 {
-  return 0;
+    if (data->buf_size < 2 ||
+        data->buf[0] != TLV_SYNC_BYTE)
+        return 0;
+
+    switch (data->buf[1]) {
+    case TLV_PACKET_IPV4:
+    case TLV_PACKET_IPV6:
+    case TLV_PACKET_IP_HEADER_COMPRESSED:
+    case TLV_PACKET_SIGNALLING:
+    case TLV_PACKET_NULL:
+        return AVPROBE_SCORE_MAX;
+    default:
+        {
+            av_log(NULL, AV_LOG_ERROR, "Unknown TLV packet type: %"PRIu8"\n",
+                   data->buf[1]);
+            return 0;
+        }
+    }
+}
+
+static int mmtp_tlv_read_header(AVFormatContext *ctx)
+{
+    int ret = -1;
+    do {
+        ret = tlv_resync(ctx);
+        if (ret < 0)
+            return ret;
+
+        ret = tlv_read_packet(ctx);
+        if (ret < 0)
+            return ret;
+    } while (ret >= 0);
+
+    return 0;
 }
 
 static int mmtp_tlv_read_packet(AVFormatContext *ctx, AVPacket *pkt)
 {
     int ret = tlv_resync(ctx);
+    if (ret < 0)
+        return ret;
+
+    ret = tlv_read_packet(ctx);
     if (ret < 0)
         return ret;
 
@@ -108,5 +235,6 @@ AVInputFormat ff_mmtp_demuxer = {
     .long_name      = NULL_IF_CONFIG_SMALL("MMTP over TLV"),
     .extensions     = "mmts,tlvmmt",
     .read_probe     = mmtp_tlv_probe,
+    .read_header    = mmtp_tlv_read_header,
     .read_packet    = mmtp_tlv_read_packet,
 };
