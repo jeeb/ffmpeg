@@ -153,6 +153,7 @@ static int tlv_read_packet(AVFormatContext *ctx)
         break;
     case TLV_PACKET_SIGNALLING:
         parser_func = tlv_parse_signalling_packet;
+        break;
     case TLV_PACKET_IPV4:
     case TLV_PACKET_IPV6:
     case TLV_PACKET_NULL:
