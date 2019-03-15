@@ -51,7 +51,7 @@ enum TLVHCfBPacketType {
     HCFB_COMP_HEADER_IPV6_AND_UDP = 0x61,
 };
 
-static int parse_hcfb_packet(AVFormatContext *ctx, struct TLVPacket *pkt)
+static int tlv_parse_hcfb_packet(AVFormatContext *ctx, struct TLVPacket *pkt)
 {
     if (pkt->pkt_type != TLV_PACKET_IP_HEADER_COMPRESSED ||
         pkt->pkt_data_size < 3)
@@ -149,7 +149,7 @@ static int tlv_read_packet(AVFormatContext *ctx)
 
     switch (packet_type) {
     case TLV_PACKET_IP_HEADER_COMPRESSED:
-        parser_func = parse_hcfb_packet;
+        parser_func = tlv_parse_hcfb_packet;
         break;
     case TLV_PACKET_SIGNALLING:
         parser_func = tlv_parse_signalling_packet;
