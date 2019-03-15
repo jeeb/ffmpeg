@@ -95,10 +95,10 @@ static int tlv_read_packet(AVFormatContext *ctx)
     AVIOContext *pb = ctx->pb;
     unsigned char tlv_header[4 + AV_INPUT_BUFFER_PADDING_SIZE] = { 0 };
     unsigned char packet_type = 0;
-    unsigned int skip_packet = 0;
     int ret = -1;
     uint16_t packet_length = 0;
     struct TLVPacket *tlv_packet = NULL;
+    int(* parser_func)(AVFormatContext *ctx, struct TLVPacket *pkt) = NULL;
     int len = avio_read(pb, tlv_header, 4);
     if (len != 4)
         return len < 0 ? len : AVERROR_EOF;
@@ -112,12 +112,12 @@ static int tlv_read_packet(AVFormatContext *ctx)
 
     switch (packet_type) {
     case TLV_PACKET_IP_HEADER_COMPRESSED:
+        parser_func = parse_hcfb_packet;
         break;
     case TLV_PACKET_IPV4:
     case TLV_PACKET_IPV6:
     case TLV_PACKET_SIGNALLING:
     case TLV_PACKET_NULL:
-        skip_packet = 1;
         break;
     default:
         {
@@ -135,12 +135,14 @@ static int tlv_read_packet(AVFormatContext *ctx)
     if (!packet_length)
         return 0;
 
-    if (skip_packet && packet_length) {
+    // No parser implemented yet, skip packet size
+    if (!parser_func) {
         av_log(ctx, AV_LOG_VERBOSE, "Skipping packet...\n");
         int64_t curr_pos      = avio_tell(pb);
         int64_t post_skip_pos = avio_skip(pb, packet_length);
         if (post_skip_pos != (packet_length + curr_pos)){
-            av_log(ctx, AV_LOG_ERROR, "Skipping packet failed! %s", av_err2str(post_skip_pos < 0 ? post_skip_pos : AVERROR_EOF));
+            av_log(ctx, AV_LOG_ERROR, "Skipping packet failed! %s",
+                   av_err2str(post_skip_pos < 0 ? post_skip_pos : AVERROR_EOF));
             return post_skip_pos < 0 ? post_skip_pos : AVERROR_EOF;
         }
 
@@ -167,7 +169,8 @@ static int tlv_read_packet(AVFormatContext *ctx)
         goto tlv_packet_read_error;
     }
 
-    if ((ret = parse_hcfb_packet(ctx, tlv_packet)) < 0) {
+    // feed the packet to a parser if alles gut
+    if ((ret = parser_func(ctx, tlv_packet)) < 0) {
         goto tlv_packet_read_error;
     }
 
