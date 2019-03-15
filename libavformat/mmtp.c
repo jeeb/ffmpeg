@@ -136,10 +136,15 @@ static int tlv_read_packet(AVFormatContext *ctx)
         return 0;
 
     if (skip_packet && packet_length) {
+        av_log(ctx, AV_LOG_VERBOSE, "Skipping packet...\n");
         int64_t curr_pos      = avio_tell(pb);
         int64_t post_skip_pos = avio_skip(pb, packet_length);
-        if (post_skip_pos != (packet_length + curr_pos))
+        if (post_skip_pos != (packet_length + curr_pos)){
+            av_log(ctx, AV_LOG_ERROR, "Skipping packet failed! %s", av_err2str(post_skip_pos < 0 ? post_skip_pos : AVERROR_EOF));
             return post_skip_pos < 0 ? post_skip_pos : AVERROR_EOF;
+        }
+
+        return 0;
     }
 
     if (!(tlv_packet = av_mallocz(sizeof(struct TLVPacket)))) {
