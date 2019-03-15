@@ -87,6 +87,13 @@ static int tlv_parse_signalling_packet(AVFormatContext *ctx, struct TLVPacket *p
     uint8_t section_syntax_indicator = get_bits(&gb, 1);
     skip_bits(&gb, 3);
     uint16_t section_length = get_bits(&gb, 12);
+    if (section_length > (pkt->pkt_data_size - 3)) {
+        av_log(ctx, AV_LOG_ERROR,
+               "A signalling packet of size %"PRIu16" (+ 3) cannot "
+               "fit a TLV packet of size %"PRIu16"!\n",
+               section_length, pkt->pkt_data_size);
+        return AVERROR_INVALIDDATA;
+    }
 
     uint16_t table_id_extension = get_bits(&gb, 16);
     skip_bits(&gb, 2);
