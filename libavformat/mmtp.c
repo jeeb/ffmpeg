@@ -99,9 +99,13 @@ static int tlv_parse_signalling_packet(AVFormatContext *ctx, struct TLVPacket *p
 
     av_log(ctx, AV_LOG_VERBOSE,
            "Signalling packet with table_id: 0x%"PRIx8", section_syntax: %s, "
-           "section_length: %"PRIu16", table_id_extension: %"PRIu16"\n",
+           "section_length: %"PRIu16", table_id_extension: %"PRIu16", "
+           "version_number: %"PRIu8", %s in use, "
+           "last_section_number: %"PRIu8"\n",
            table_id, section_syntax_indicator ? "yes" : "no",
-           section_length, table_id_extension);
+           section_length, table_id_extension, version_number,
+           current_next_indicator ? "currently" : "next",
+           last_section_number);
 
     return 0;
 }
