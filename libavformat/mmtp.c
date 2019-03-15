@@ -20,6 +20,7 @@
  */
 
 #include "libavutil/intreadwrite.h"
+#include "libavcodec/get_bits.h"
 
 #include "avformat.h"
 #include "internal.h"
@@ -69,6 +70,42 @@ static int parse_hcfb_packet(AVFormatContext *ctx, struct TLVPacket *pkt)
     return 0;
 }
 
+static int tlv_parse_signalling_packet(AVFormatContext *ctx, struct TLVPacket *pkt)
+{
+    GetBitContext gb = { 0 };
+    if (pkt->pkt_type != TLV_PACKET_SIGNALLING ||
+        pkt->pkt_data_size < (8 + 4))
+        return AVERROR_INVALIDDATA;
+
+    if (init_get_bits8(&gb, pkt->pkt_data, pkt->pkt_data_size) < 0) {
+        return AVERROR_INVALIDDATA;
+    }
+
+    // first three bytes contain the basics and the length is calculated
+    // from them on.
+    uint8_t table_id = get_bits(&gb, 8);
+    uint8_t section_syntax_indicator = get_bits(&gb, 1);
+    skip_bits(&gb, 3);
+    uint16_t section_length = get_bits(&gb, 12);
+
+    uint16_t table_id_extension = get_bits(&gb, 16);
+    skip_bits(&gb, 2);
+
+    uint8_t version_number = get_bits(&gb, 5);
+    uint8_t current_next_indicator = get_bits(&gb, 1);
+
+    uint8_t section_number = get_bits(&gb, 8);
+    uint8_t last_section_number = get_bits(&gb, 8);
+
+    av_log(ctx, AV_LOG_VERBOSE,
+           "Signalling packet with table_id: 0x%"PRIx8", section_syntax: %s, "
+           "section_length: %"PRIu16", table_id_extension: %"PRIu16"\n",
+           table_id, section_syntax_indicator ? "yes" : "no",
+           section_length, table_id_extension);
+
+    return 0;
+}
+
 static int tlv_resync(AVFormatContext *ctx)
 {
     AVIOContext *pb = ctx->pb;
@@ -114,9 +151,10 @@ static int tlv_read_packet(AVFormatContext *ctx)
     case TLV_PACKET_IP_HEADER_COMPRESSED:
         parser_func = parse_hcfb_packet;
         break;
+    case TLV_PACKET_SIGNALLING:
+        parser_func = tlv_parse_signalling_packet;
     case TLV_PACKET_IPV4:
     case TLV_PACKET_IPV6:
-    case TLV_PACKET_SIGNALLING:
     case TLV_PACKET_NULL:
         break;
     default:
