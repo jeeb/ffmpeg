@@ -53,15 +53,18 @@ enum TLVHCfBPacketType {
 
 static int tlv_parse_hcfb_packet(AVFormatContext *ctx, struct TLVPacket *pkt)
 {
+    GetBitContext gb = { 0 };
     if (pkt->pkt_type != TLV_PACKET_IP_HEADER_COMPRESSED ||
         pkt->pkt_data_size < 3)
         return AVERROR_INVALIDDATA;
 
-    uint16_t cid_and_sn = AV_RB16(pkt->pkt_data);
-    uint8_t  cid_header_type = pkt->pkt_data[2];
+    if (init_get_bits8(&gb, pkt->pkt_data, pkt->pkt_data_size) < 0) {
+        return AVERROR_INVALIDDATA;
+    }
 
-    uint16_t cid = (cid_and_sn & 0xfff0) >> 4;
-    uint8_t  sn  = cid_and_sn & 0x0f;
+    uint16_t cid             = get_bits(&gb, 12);
+    uint8_t  sn              = get_bits(&gb, 4);
+    uint8_t  cid_header_type = get_bits(&gb, 8);
 
     av_log(ctx, AV_LOG_VERBOSE, "HCfB packet with cid: %"PRIu16", "
                                 "sn: %"PRIu8", cid header type: 0x%"PRIx8"\n",
