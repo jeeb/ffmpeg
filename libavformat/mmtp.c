@@ -99,8 +99,80 @@ static int tlv_parse_hcfb_packet(AVFormatContext *ctx, struct TLVPacket *pkt)
 }
 
 static int tlv_parse_nit_packet(AVFormatContext *ctx, struct TLVSignallingPacket *pkt) {
-    // 10 bit field in 12 bits
-    // uint16_t network_descriptors_length = (get_bits(gb, 12) & 0x3ff);
+    // 13 comes from:
+    // - 5 bytes for the common signalling structure that we have passed
+    // - 2 bytes for this length structure (4+12 bits)
+    // - 2 bytes for a similar thing for TLV_stream_loop_length (4+12 bits)
+    // - 4 bytes for the CRC32 at the end
+    uint32_t minimum_required_length = 13;
+    uint16_t network_id = 0;
+    uint16_t network_descriptors_length = 0;
+    uint16_t tlv_stream_loop_length = 0;
+    // for TLV-NIT this is a 10 bit field in 12 bits
+    pkt->section_length = (pkt->section_length & 0x3ff);
+
+    if (!pkt->section_syntax_indicator || pkt->section_length > 1021)
+        return AVERROR_INVALIDDATA;
+
+    network_id = pkt->table_id_extension;
+
+    skip_bits(pkt->gb, 4);
+
+    // another 10 bit field in 12 bits
+    network_descriptors_length = (get_bits(pkt->gb, 12) & 0x3ff);
+
+    if (pkt->section_length < minimum_required_length ||
+        network_descriptors_length > (pkt->section_length - minimum_required_length))
+        return AVERROR_INVALIDDATA;
+
+    // update minimum required length with
+    // how long the network descriptors were
+    minimum_required_length += network_descriptors_length;
+
+    // TODO: handle network descriptors
+    if (network_descriptors_length)
+        skip_bits_long(pkt->gb, network_descriptors_length * 8);
+
+    skip_bits(pkt->gb, 4);
+
+    // another 10 bit field in 12 bits
+    tlv_stream_loop_length = (get_bits(pkt->gb, 12) & 0x3ff);
+
+    if (pkt->section_length < minimum_required_length ||
+        tlv_stream_loop_length > (pkt->section_length - minimum_required_length))
+        return AVERROR_INVALIDDATA;
+
+    av_log(ctx, AV_LOG_VERBOSE, "NIT packet for network_id: %"PRIu16". "
+           "Size: %"PRIu16", network_descriptors_length: %"PRIu16", "
+           "TLV_stream_loop_length: %"PRIu16"\n",
+           network_id, pkt->section_length, network_descriptors_length,
+           tlv_stream_loop_length);
+
+    for (unsigned int left_length = tlv_stream_loop_length; left_length >= 6;) {
+        uint16_t tlv_stream_id = get_bits(pkt->gb, 16);
+        uint16_t original_network_id = get_bits(pkt->gb, 16);
+        uint16_t tlv_stream_descriptors_length = 0;
+
+        skip_bits(pkt->gb, 4);
+
+        // another 10 bit field in 12 bits
+        tlv_stream_descriptors_length = (get_bits(pkt->gb, 12) & 0x3ff);
+
+        av_log(ctx, AV_LOG_VERBOSE, "TLV Stream ID %"PRIu16": "
+                                    "original_network_id: %"PRIu16", "
+                                    "descriptors_length: %"PRIu16"\n",
+               tlv_stream_id, original_network_id,
+               tlv_stream_descriptors_length);
+
+        if (left_length < (6 + tlv_stream_descriptors_length))
+            return AVERROR_INVALIDDATA;
+
+        // TODO: handle TLV stream descriptors
+        if (tlv_stream_descriptors_length)
+            skip_bits(pkt->gb, tlv_stream_descriptors_length * 8);
+
+        left_length -= (6 + tlv_stream_descriptors_length);
+    }
 
     return 0;
 }
@@ -179,7 +251,7 @@ static int tlv_parse_signalling_packet(AVFormatContext *ctx, struct TLVPacket *p
            sig_pkt.section_number, sig_pkt.last_section_number);
 
     if (parser_func)
-        parser_func(ctx, &sig_pkt);
+        return parser_func(ctx, &sig_pkt);
 
     return 0;
 }
