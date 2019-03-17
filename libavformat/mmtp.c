@@ -98,7 +98,8 @@ static int tlv_parse_hcfb_packet(AVFormatContext *ctx, struct TLVPacket *pkt)
     return 0;
 }
 
-static int tlv_parse_nit_packet(AVFormatContext *ctx, struct TLVSignallingPacket *pkt) {
+static int tlv_parse_nit_packet(AVFormatContext *ctx, struct TLVSignallingPacket *pkt)
+{
     // 13 comes from:
     // - 5 bytes for the common signalling structure that we have passed
     // - 2 bytes for this length structure (4+12 bits)
@@ -111,7 +112,8 @@ static int tlv_parse_nit_packet(AVFormatContext *ctx, struct TLVSignallingPacket
     // for TLV-NIT this is a 10 bit field in 12 bits
     pkt->section_length = (pkt->section_length & 0x3ff);
 
-    if (!pkt->section_syntax_indicator || pkt->section_length > 1021)
+    if (!pkt->section_syntax_indicator || pkt->section_length > 1021 ||
+        pkt->section_length < minimum_required_length)
         return AVERROR_INVALIDDATA;
 
     network_id = pkt->table_id_extension;
@@ -177,7 +179,72 @@ static int tlv_parse_nit_packet(AVFormatContext *ctx, struct TLVSignallingPacket
     return 0;
 }
 
-static int tlv_parse_extended_packet(AVFormatContext *ctx, struct TLVSignallingPacket *pkt) {
+static int tlv_parse_amt_packet(AVFormatContext *ctx, struct TLVSignallingPacket *pkt)
+{
+    // 11 comes from:
+    // - 5 bytes for the common signalling structure that we have passed
+    // - 2 bytes for the service_id counter
+    // - 4 bytes for the CRC32 at the end
+    uint32_t minimum_required_length = 11;
+    uint16_t num_of_service_id = 0;
+
+    if (!pkt->section_syntax_indicator ||
+        pkt->section_length < minimum_required_length)
+        return AVERROR_INVALIDDATA;
+
+    num_of_service_id = get_bits(pkt->gb, 10);
+    skip_bits(pkt->gb, 6);
+
+    av_log(ctx, AV_LOG_VERBOSE, "TLV AMT found with %"PRIu16" service IDs\n",
+           num_of_service_id);
+
+    for (unsigned int i = 0; i < num_of_service_id; i++) {
+        uint16_t service_id = 0;
+        uint8_t ip_version = 0;
+        uint16_t service_loop_length = 0;
+        minimum_required_length += 4;
+        if (pkt->section_length < minimum_required_length)
+            return AVERROR_INVALIDDATA;
+
+        service_id = get_bits(pkt->gb, 16);
+        ip_version = get_bits(pkt->gb, 1);
+        skip_bits(pkt->gb, 5);
+        service_loop_length = get_bits(pkt->gb, 10);
+
+        av_log(ctx, AV_LOG_VERBOSE, "Service ID %"PRIu16": "
+                                    "ip_version: %s\n",
+               service_id, ip_version ? "ipv6": "ipv4");
+
+        minimum_required_length += service_loop_length;
+        if (pkt->section_length < minimum_required_length)
+            return AVERROR_INVALIDDATA;
+
+        if (service_loop_length)
+            skip_bits_long(pkt->gb, service_loop_length * 8);
+    }
+
+    return 0;
+}
+
+static int tlv_parse_extended_packet(AVFormatContext *ctx, struct TLVSignallingPacket *pkt)
+{
+    int(* parser_func)(AVFormatContext *ctx, struct TLVSignallingPacket *pkt) = NULL;
+
+    switch (pkt->table_id_extension) {
+    case TLV_TABLE_EXTENDED_AMT:
+        parser_func = tlv_parse_amt_packet;
+        break;
+    default:
+        {
+            av_log(ctx, AV_LOG_ERROR, "Unknown extension identifier: "
+                                      "0x%"PRIx16"!\n",
+                   pkt->table_id_extension);
+            return AVERROR_INVALIDDATA;
+        }
+    }
+
+    if (parser_func)
+        return parser_func(ctx, pkt);
 
     return 0;
 }
