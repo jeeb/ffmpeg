@@ -192,8 +192,21 @@ static int tlv_parse_nit_packet(AVFormatContext *ctx, struct TLVSignallingPacket
             return AVERROR_INVALIDDATA;
 
         // TODO: handle TLV stream descriptors
-        if (tlv_stream_descriptors_length)
+        if (tlv_stream_descriptors_length) {
+            const uint8_t *buff_location = (pkt->gb->buffer + (get_bits_count(pkt->gb) / 8));
+
+            for (unsigned int left_descriptor_length = tlv_stream_descriptors_length; left_descriptor_length >= 2;) {
+                uint8_t descriptor_tag = buff_location[0];
+                uint8_t descriptor_length = buff_location[1];
+
+                av_log(ctx, AV_LOG_VERBOSE, "Stream descriptor 0x%2x, length: %"PRIu8"\n",
+                       descriptor_tag, descriptor_length);
+
+                break;
+            }
+
             skip_bits(pkt->gb, tlv_stream_descriptors_length * 8);
+        }
 
         left_length -= (6 + tlv_stream_descriptors_length);
     }
