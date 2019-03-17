@@ -246,7 +246,7 @@ static int tlv_read_packet(AVFormatContext *ctx)
 
     packet_length = AV_RB16(tlv_header + 2);
 
-    av_log(ctx, AV_LOG_VERBOSE, "TLV packet of type %"PRIu8" and size %"PRIu16" found\n",
+    av_log(ctx, AV_LOG_VERBOSE, "TLV packet of type 0x%"PRIx8" and size %"PRIu16" found\n",
            packet_type, packet_length);
 
     if (!packet_length)
