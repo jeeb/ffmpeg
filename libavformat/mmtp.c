@@ -76,6 +76,28 @@ struct TLVSignallingPacket {
     uint8_t last_section_number;
 };
 
+enum TLVAMTMappingType {
+    TLV_AMT_IPV4 = 0,
+    TLV_AMT_IPV6 = 1,
+};
+
+struct TLVAMTMapping {
+    uint16_t service_id;
+    enum TLVAMTMappingType type;
+
+    // common
+    uint8_t src_address_mask;
+    uint8_t dst_address_mask;
+
+    // if ipv4
+    uint8_t ipv4_src_address[4];
+    uint8_t ipv4_dst_address[4];
+
+    // if ipv6
+    uint8_t ipv6_src_address[16];
+    uint8_t ipv6_dst_address[16];
+};
+
 static int tlv_parse_hcfb_packet(AVFormatContext *ctx, struct TLVPacket *pkt)
 {
     GetBitContext gb = { 0 };
@@ -202,6 +224,10 @@ static int tlv_parse_amt_packet(AVFormatContext *ctx, struct TLVSignallingPacket
         uint16_t service_id = 0;
         uint8_t ip_version = 0;
         uint16_t service_loop_length = 0;
+        unsigned int minimum_address_part_length = 0;
+        struct TLVAMTMapping amt_mapping = { 0 };
+        const uint8_t *buff_location = NULL;
+
         minimum_required_length += 4;
         if (pkt->section_length < minimum_required_length)
             return AVERROR_INVALIDDATA;
@@ -216,11 +242,65 @@ static int tlv_parse_amt_packet(AVFormatContext *ctx, struct TLVSignallingPacket
                service_id, ip_version ? "ipv6": "ipv4");
 
         minimum_required_length += service_loop_length;
-        if (pkt->section_length < minimum_required_length)
+        // (128+128+8+8) / 8 => 34 for ipv6
+        // (32+32+8+8) / 8 => 10 for ipv4
+        minimum_address_part_length = ip_version ? 34 : 10;
+        if (pkt->section_length < minimum_required_length ||
+            service_loop_length < minimum_address_part_length)
             return AVERROR_INVALIDDATA;
 
-        if (service_loop_length)
-            skip_bits_long(pkt->gb, service_loop_length * 8);
+        amt_mapping.type = ip_version ? TLV_AMT_IPV6 : TLV_AMT_IPV4;
+        buff_location = (pkt->gb->buffer + (get_bits_count(pkt->gb) / 8));
+
+        if (ip_version) {
+            AV_COPY128U(amt_mapping.ipv6_src_address, buff_location);
+            buff_location += 16;
+            amt_mapping.src_address_mask = buff_location[0];
+            buff_location += 1;
+            AV_COPY128U(amt_mapping.ipv6_dst_address, buff_location);
+            buff_location += 16;
+            amt_mapping.dst_address_mask = buff_location[0];
+
+            av_log(ctx, AV_LOG_VERBOSE, "FFFUU ipv6 - "
+                   "src: %02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x/%u, "
+                   "dst: %02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x/%u\n",
+                   amt_mapping.ipv6_src_address[0],  amt_mapping.ipv6_src_address[1],
+                   amt_mapping.ipv6_src_address[2],  amt_mapping.ipv6_src_address[3],
+                   amt_mapping.ipv6_src_address[4],  amt_mapping.ipv6_src_address[5],
+                   amt_mapping.ipv6_src_address[6],  amt_mapping.ipv6_src_address[7],
+                   amt_mapping.ipv6_src_address[8],  amt_mapping.ipv6_src_address[9],
+                   amt_mapping.ipv6_src_address[10], amt_mapping.ipv6_src_address[11],
+                   amt_mapping.ipv6_src_address[12], amt_mapping.ipv6_src_address[13],
+                   amt_mapping.ipv6_src_address[14], amt_mapping.ipv6_src_address[15],
+                   amt_mapping.src_address_mask,
+                   amt_mapping.ipv6_dst_address[0],  amt_mapping.ipv6_dst_address[1],
+                   amt_mapping.ipv6_dst_address[2],  amt_mapping.ipv6_dst_address[3],
+                   amt_mapping.ipv6_dst_address[4],  amt_mapping.ipv6_dst_address[5],
+                   amt_mapping.ipv6_dst_address[6],  amt_mapping.ipv6_dst_address[7],
+                   amt_mapping.ipv6_dst_address[8],  amt_mapping.ipv6_dst_address[9],
+                   amt_mapping.ipv6_dst_address[10], amt_mapping.ipv6_dst_address[11],
+                   amt_mapping.ipv6_dst_address[12], amt_mapping.ipv6_dst_address[13],
+                   amt_mapping.ipv6_dst_address[14], amt_mapping.ipv6_dst_address[15],
+                   amt_mapping.dst_address_mask);
+        } else {
+            AV_COPY32(amt_mapping.ipv4_src_address, buff_location);
+            buff_location += 4;
+            amt_mapping.src_address_mask = buff_location[0];
+            buff_location += 1;
+            AV_COPY32(amt_mapping.ipv4_dst_address, buff_location);
+            amt_mapping.dst_address_mask = buff_location[0];
+
+            av_log(ctx, AV_LOG_VERBOSE, "FFFUU ipv4 - "
+                   "src: %u.%u.%u.%u/%u, dst: %u.%u.%u.%u/%u\n",
+                   amt_mapping.ipv4_src_address[0],  amt_mapping.ipv4_src_address[1],
+                   amt_mapping.ipv4_src_address[2],  amt_mapping.ipv4_src_address[3],
+                   amt_mapping.src_address_mask,
+                   amt_mapping.ipv4_dst_address[0],  amt_mapping.ipv4_dst_address[1],
+                   amt_mapping.ipv4_dst_address[2],  amt_mapping.ipv4_dst_address[3],
+                   amt_mapping.dst_address_mask);
+        }
+
+        skip_bits_long(pkt->gb, service_loop_length * 8);
     }
 
     return 0;
