@@ -51,6 +51,31 @@ enum TLVHCfBPacketType {
     HCFB_COMP_HEADER_IPV6_AND_UDP = 0x61,
 };
 
+enum TLVTableType {
+    TLV_TABLE_NIT_ACTUAL = 0x40,
+    TLV_TABLE_NIT_OTHER  = 0x41,
+    TLV_TABLE_EXTENDED   = 0xFE, //< table id extension signals the table
+};
+
+enum TLVTableExtensionType {
+    TLV_TABLE_EXTENDED_AMT = 0x0000,
+};
+
+struct TLVSignallingPacket {
+    GetBitContext *gb;
+    // common parts
+    uint8_t table_id;
+    uint8_t section_syntax_indicator;
+    uint16_t section_length;
+
+    // values re-used by the sub-structures
+    uint16_t table_id_extension;
+    uint8_t version_number;
+    uint8_t current_next_indicator;
+    uint8_t section_number;
+    uint8_t last_section_number;
+};
+
 static int tlv_parse_hcfb_packet(AVFormatContext *ctx, struct TLVPacket *pkt)
 {
     GetBitContext gb = { 0 };
@@ -73,8 +98,22 @@ static int tlv_parse_hcfb_packet(AVFormatContext *ctx, struct TLVPacket *pkt)
     return 0;
 }
 
+static int tlv_parse_nit_packet(AVFormatContext *ctx, struct TLVSignallingPacket *pkt) {
+    // 10 bit field in 12 bits
+    // uint16_t network_descriptors_length = (get_bits(gb, 12) & 0x3ff);
+
+    return 0;
+}
+
+static int tlv_parse_extended_packet(AVFormatContext *ctx, struct TLVSignallingPacket *pkt) {
+
+    return 0;
+}
+
 static int tlv_parse_signalling_packet(AVFormatContext *ctx, struct TLVPacket *pkt)
 {
+    struct TLVSignallingPacket sig_pkt = { 0 };
+    int(* parser_func)(AVFormatContext *ctx, struct TLVSignallingPacket *pkt) = NULL;
     GetBitContext gb = { 0 };
     if (pkt->pkt_type != TLV_PACKET_SIGNALLING ||
         pkt->pkt_data_size < (8 + 4))
@@ -84,38 +123,63 @@ static int tlv_parse_signalling_packet(AVFormatContext *ctx, struct TLVPacket *p
         return AVERROR_INVALIDDATA;
     }
 
+    sig_pkt.gb = &gb;
+
     // first three bytes contain the basics and the length is calculated
     // from them on.
-    uint8_t table_id = get_bits(&gb, 8);
-    uint8_t section_syntax_indicator = get_bits(&gb, 1);
+    sig_pkt.table_id = get_bits(&gb, 8);
+    sig_pkt.section_syntax_indicator = get_bits(&gb, 1);
     skip_bits(&gb, 3);
-    uint16_t section_length = get_bits(&gb, 12);
-    if (section_length > (pkt->pkt_data_size - 3)) {
+    sig_pkt.section_length = get_bits(&gb, 12);
+    if (sig_pkt.section_length > (pkt->pkt_data_size - 3)) {
         av_log(ctx, AV_LOG_ERROR,
                "A signalling packet of size %"PRIu16" (+ 3) cannot "
                "fit a TLV packet of size %"PRIu16"!\n",
-               section_length, pkt->pkt_data_size);
+               sig_pkt.section_length, pkt->pkt_data_size);
         return AVERROR_INVALIDDATA;
     }
 
-    uint16_t table_id_extension = get_bits(&gb, 16);
+    switch (sig_pkt.table_id) {
+    case TLV_TABLE_NIT_ACTUAL:
+    case TLV_TABLE_NIT_OTHER:
+        parser_func = tlv_parse_nit_packet;
+        break;
+    case TLV_TABLE_EXTENDED:
+        parser_func = tlv_parse_extended_packet;
+        break;
+    default:
+        {
+            av_log(ctx, AV_LOG_ERROR, "Unknown TLV signalling table id: 0x%"PRIx8"\n",
+                   sig_pkt.table_id);
+            return AVERROR_INVALIDDATA;
+        }
+    }
+
+    sig_pkt.table_id_extension = get_bits(&gb, 16);
     skip_bits(&gb, 2);
 
-    uint8_t version_number = get_bits(&gb, 5);
-    uint8_t current_next_indicator = get_bits(&gb, 1);
+    // if (table_id == TLV_TABLE_EXTENDED &&
+    //    table_id_extension == TLV_TABLE_EXTENDED_AMT)
+    //    parser_func = tlv_parse_amt_packet;
 
-    uint8_t section_number = get_bits(&gb, 8);
-    uint8_t last_section_number = get_bits(&gb, 8);
+    sig_pkt.version_number = get_bits(&gb, 5);
+    sig_pkt.current_next_indicator = get_bits(&gb, 1);
+
+    sig_pkt.section_number = get_bits(&gb, 8);
+    sig_pkt.last_section_number = get_bits(&gb, 8);
 
     av_log(ctx, AV_LOG_VERBOSE,
-           "Signalling packet with table_id: 0x%"PRIx8", section_syntax: %s, "
-           "section_length: %"PRIu16", table_id_extension: %"PRIu16", "
+           "Signalling packet with table_id: 0x%"PRIx8", %s format, "
+           "section_length: %"PRIu16",  table_id_extension: 0x%"PRIx16", "
            "version_number: %"PRIu8", %s in use, "
-           "last_section_number: %"PRIu8"\n",
-           table_id, section_syntax_indicator ? "yes" : "no",
-           section_length, table_id_extension, version_number,
-           current_next_indicator ? "currently" : "next",
-           last_section_number);
+           "section number: %"PRIu8", last_section_number: %"PRIu8"\n",
+           sig_pkt.table_id, sig_pkt.section_syntax_indicator ? "extension" : "normal",
+           sig_pkt.section_length, sig_pkt.table_id_extension, sig_pkt.version_number,
+           sig_pkt.current_next_indicator ? "currently" : "next",
+           sig_pkt.section_number, sig_pkt.last_section_number);
+
+    if (parser_func)
+        parser_func(ctx, &sig_pkt);
 
     return 0;
 }
