@@ -157,14 +157,29 @@ static int tlv_parse_nit_packet(AVFormatContext *ctx, struct TLVSignallingPacket
         const uint8_t *buff_location = (pkt->gb->buffer + (get_bits_count(pkt->gb) / 8));
 
         for (unsigned int left_descriptor_length = network_descriptors_length; left_descriptor_length >= 2;) {
+            char *network_name = NULL;
             uint8_t descriptor_tag = buff_location[0];
             uint8_t descriptor_length = buff_location[1];
+            unsigned int required_length = (2 + descriptor_length);
 
             av_log(ctx, AV_LOG_VERBOSE, "Network descriptor 0x%2x, length: %"PRIu8"\n",
                    descriptor_tag, descriptor_length);
 
-            left_descriptor_length -= (2 + descriptor_length);
-            buff_location += (2 + descriptor_length);
+            if (left_descriptor_length < required_length)
+                return AVERROR_INVALIDDATA;
+
+            if (descriptor_tag == 0x40) {
+                network_name = av_strndup((const char *)(buff_location + 2), descriptor_length);
+                if (network_name) {
+                    av_log(ctx, AV_LOG_VERBOSE,
+                           "Network name descriptor: %s\n",
+                           network_name);
+                    av_free(network_name);
+                }
+            }
+
+            left_descriptor_length -= required_length;
+            buff_location += required_length;
         }
 
         skip_bits_long(pkt->gb, network_descriptors_length * 8);
@@ -210,12 +225,16 @@ static int tlv_parse_nit_packet(AVFormatContext *ctx, struct TLVSignallingPacket
             for (unsigned int left_descriptor_length = tlv_stream_descriptors_length; left_descriptor_length >= 2;) {
                 uint8_t descriptor_tag = buff_location[0];
                 uint8_t descriptor_length = buff_location[1];
+                unsigned int required_length = (2 + descriptor_length);
 
                 av_log(ctx, AV_LOG_VERBOSE, "Stream descriptor 0x%2x, length: %"PRIu8"\n",
                        descriptor_tag, descriptor_length);
 
-                left_descriptor_length -= (2 + descriptor_length);
-                buff_location += (2 + descriptor_length);
+                if (left_descriptor_length < required_length)
+                    return AVERROR_INVALIDDATA;
+
+                left_descriptor_length -= required_length;
+                buff_location += required_length;
             }
 
             skip_bits(pkt->gb, tlv_stream_descriptors_length * 8);
