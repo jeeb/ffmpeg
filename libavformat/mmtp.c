@@ -202,7 +202,8 @@ static int tlv_parse_nit_packet(AVFormatContext *ctx, struct TLVSignallingPacket
                 av_log(ctx, AV_LOG_VERBOSE, "Stream descriptor 0x%2x, length: %"PRIu8"\n",
                        descriptor_tag, descriptor_length);
 
-                break;
+                left_descriptor_length -= (2 + descriptor_length);
+                buff_location += (2 + descriptor_length);
             }
 
             skip_bits(pkt->gb, tlv_stream_descriptors_length * 8);
