@@ -204,7 +204,6 @@ static int tlv_parse_nit_packet(AVFormatContext *ctx, struct TLVSignallingPacket
         if (left_length < (6 + tlv_stream_descriptors_length))
             return AVERROR_INVALIDDATA;
 
-        // TODO: handle TLV stream descriptors
         if (tlv_stream_descriptors_length) {
             const uint8_t *buff_location = (pkt->gb->buffer + (get_bits_count(pkt->gb) / 8));
 
