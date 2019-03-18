@@ -153,9 +153,22 @@ static int tlv_parse_nit_packet(AVFormatContext *ctx, struct TLVSignallingPacket
     // how long the network descriptors were
     minimum_required_length += network_descriptors_length;
 
-    // TODO: handle network descriptors
-    if (network_descriptors_length)
+    if (network_descriptors_length) {
+        const uint8_t *buff_location = (pkt->gb->buffer + (get_bits_count(pkt->gb) / 8));
+
+        for (unsigned int left_descriptor_length = network_descriptors_length; left_descriptor_length >= 2;) {
+            uint8_t descriptor_tag = buff_location[0];
+            uint8_t descriptor_length = buff_location[1];
+
+            av_log(ctx, AV_LOG_VERBOSE, "Network descriptor 0x%2x, length: %"PRIu8"\n",
+                   descriptor_tag, descriptor_length);
+
+            left_descriptor_length -= (2 + descriptor_length);
+            buff_location += (2 + descriptor_length);
+        }
+
         skip_bits_long(pkt->gb, network_descriptors_length * 8);
+    }
 
     skip_bits(pkt->gb, 4);
 
