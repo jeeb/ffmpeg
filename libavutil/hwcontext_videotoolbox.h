@@ -49,6 +49,6 @@ enum AVPixelFormat av_map_videotoolbox_format_to_pixfmt(uint32_t cv_fmt);
  * Convert an AVPixelFormat to a VideoToolbox (actually CoreVideo) format.
  * Returns 0 if no known equivalent was found.
  */
-uint32_t av_map_videotoolbox_format_from_pixfmt(enum AVPixelFormat pix_fmt);
+uint32_t av_map_videotoolbox_format_from_pixfmt(enum AVPixelFormat pix_fmt, bool full_range);
 
 #endif /* AVUTIL_HWCONTEXT_VIDEOTOOLBOX_H */
