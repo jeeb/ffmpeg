@@ -23,6 +23,8 @@
 
 #include "packet.h"
 
+#define FF_PACKETLIST_FLAG_PREPEND (1 << 0) /**< Prepend created AVPacketList instead of appending */
+
 typedef struct PacketList {
     AVPacket pkt;
     struct PacketList *next;
@@ -38,6 +40,7 @@ typedef struct PacketList {
  * @param copy  A callback to copy the contents of the packet to the list.
                 May be null, in which case the packet's reference will be
                 moved to the list.
+ * @param flags Additional FF_PACKETLIST_FLAG flags.
  * @return 0 on success, negative AVERROR value on failure. On failure,
            the packet and the list are unchanged.
  */

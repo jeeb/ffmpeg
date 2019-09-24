@@ -757,6 +757,7 @@ int avpriv_packet_list_put(PacketList **packet_buffer,
                            int flags)
 {
     PacketList *pktl = av_mallocz(sizeof(PacketList));
+    unsigned int update_end_point = 1;
     int ret;
 
     if (!pktl)
@@ -777,13 +778,23 @@ int avpriv_packet_list_put(PacketList **packet_buffer,
         av_packet_move_ref(&pktl->pkt, pkt);
     }
 
-    if (*packet_buffer)
-        (*plast_pktl)->next = pktl;
-    else
+    if (*packet_buffer) {
+        if (flags & FF_PACKETLIST_FLAG_PREPEND) {
+            pktl->next = *packet_buffer;
+            *packet_buffer = pktl;
+            update_end_point = 0;
+        } else {
+            (*plast_pktl)->next = pktl;
+        }
+    } else {
         *packet_buffer = pktl;
+    }
 
-    /* Add the packet in the buffered packet list. */
-    *plast_pktl = pktl;
+    if (update_end_point) {
+        /* Add the packet in the buffered packet list. */
+        *plast_pktl = pktl;
+    }
+
     return 0;
 }
 
