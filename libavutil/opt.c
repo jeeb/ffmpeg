@@ -1251,6 +1251,12 @@ static void opt_list(void *obj, void *av_log_obj, const char *unit,
         if (opt->help)
             av_log(av_log_obj, AV_LOG_INFO, " %s", opt->help);
 
+        if (opt->dyn_help) {
+            const char *le_help = opt->dyn_help();
+            av_log(av_log_obj, AV_LOG_INFO, " %s", le_help ? le_help : "<Module failed to generate help text>");
+            av_freep(&le_help);
+        }
+
         if (av_opt_query_ranges(&r, obj, opt->name, AV_OPT_SEARCH_FAKE_OBJ) >= 0) {
             switch (opt->type) {
             case AV_OPT_TYPE_INT:

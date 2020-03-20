@@ -299,6 +299,15 @@ typedef struct AVOption {
      * unit. May be NULL.
      */
     const char *unit;
+
+    /**
+     * English dynamically generated help text.
+     * The static help text should always be
+     * utilized first.
+     * The returned buffer should be freed
+     * after usage with the av_free* functions.
+     */
+    const char *(*dyn_help)(void);
 } AVOption;
 
 /**
