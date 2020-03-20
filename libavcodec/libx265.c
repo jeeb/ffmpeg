@@ -28,6 +28,7 @@
 #include <float.h>
 
 #include "libavutil/internal.h"
+#include "libavutil/bprint.h"
 #include "libavutil/common.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
@@ -111,6 +112,26 @@ static av_cold int libx265_param_parse_int(AVCodecContext *avctx,
     }
 
     return 0;
+}
+
+static const char *libx265_preset_help(void)
+{
+    AVBPrint buf = { 0 };
+    int i = 0;
+    char *bprint_buffer = NULL;
+
+    av_bprint_init(&buf, 0, AV_BPRINT_SIZE_UNLIMITED);
+
+    av_bprintf(&buf, "(possible presets: ");
+
+    for (; x265_preset_names[i]; i++)
+        av_bprintf(&buf, "%s%s", x265_preset_names[i], x265_preset_names[i + 1] ? ", " : "");
+
+    av_bprintf(&buf, ")");
+
+    av_bprint_finalize(&buf, av_bprint_is_complete(&buf) ? &bprint_buffer : NULL);
+
+    return bprint_buffer;
 }
 
 static av_cold int libx265_encode_init(AVCodecContext *avctx)
@@ -638,7 +659,7 @@ static const AVOption options[] = {
     { "crf",         "set the x265 crf",                                                            OFFSET(crf),       AV_OPT_TYPE_FLOAT,  { .dbl = -1 }, -1, FLT_MAX, VE },
     { "qp",          "set the x265 qp",                                                             OFFSET(cqp),       AV_OPT_TYPE_INT,    { .i64 = -1 }, -1, INT_MAX, VE },
     { "forced-idr",  "if forcing keyframes, force them as IDR frames",                              OFFSET(forced_idr),AV_OPT_TYPE_BOOL,   { .i64 =  0 },  0,       1, VE },
-    { "preset",      "set the x265 preset",                                                         OFFSET(preset),    AV_OPT_TYPE_STRING, { 0 }, 0, 0, VE },
+    { "preset",      "set the x265 preset",                                                         OFFSET(preset),    AV_OPT_TYPE_STRING, { 0 }, 0, 0, VE , NULL, libx265_preset_help },
     { "tune",        "set the x265 tune parameter",                                                 OFFSET(tune),      AV_OPT_TYPE_STRING, { 0 }, 0, 0, VE },
     { "profile",     "set the x265 profile",                                                        OFFSET(profile),   AV_OPT_TYPE_STRING, { 0 }, 0, 0, VE },
     { "x265-params", "set the x265 configuration using a :-separated list of key=value parameters", OFFSET(x265_opts), AV_OPT_TYPE_DICT,   { 0 }, 0, 0, VE },
