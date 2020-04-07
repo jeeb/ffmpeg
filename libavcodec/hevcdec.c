@@ -2953,6 +2953,192 @@ fail:
     return ret;
 }
 
+#define RPU_COEFF_TYPE_FIXED_PRECISION 0
+#define RPU_COEFF_TYPE_FLOAT32         1
+#define RPU_NUM_COMPONENTS             3
+
+#define RPU_MAPPING_POLYNOMIAL 0
+#define RPU_MAPPING_MMR 1
+
+static void dovi_rpu_nal(HEVCContext *s, GetBitContext *gb)
+{
+    uint8_t prefix = get_bits(gb, 8);
+    if (prefix != 25) {
+        av_log(s, AV_LOG_ERROR, "Invalid RPU prefix: %"PRIu8"\n",
+               prefix);
+        return;
+    }
+
+    /* RPU header, common values */
+    uint8_t rpu_type = get_bits(gb, 6);
+    uint16_t rpu_format = get_bits(gb, 11);
+
+    av_log(s, AV_LOG_VERBOSE, "RPU type: %"PRIu8", RPU format: %"PRIu16"\n",
+           rpu_type, rpu_format);
+
+    /* RPU header and contents, specific to type 2 */
+    if (rpu_type == 2) {
+        uint8_t vdr_rpu_profile = get_bits(gb, 4);
+        uint8_t vdr_rpu_level   = get_bits(gb, 4);
+        uint8_t vdr_seq_info_present = get_bits1(gb);
+
+        uint8_t chroma_resampling_explicit_filter = 0;
+        uint8_t coefficient_data_type = 0;
+        unsigned int coefficient_log2_denom = 0;
+        uint8_t vdr_rpu_normalized_idc = 0;
+
+        uint8_t bl_video_full_range = 0;
+
+        unsigned int BL_bit_depth_minus8 = 0;
+        unsigned int EL_bit_depth_minus8 = 0;
+        unsigned int vdr_bit_depth_minus8 = 0;
+
+        uint8_t spatial_resampling_filter = 0;
+        uint8_t el_spatial_resampling_filter = 0;
+        uint8_t disable_residual = 0;
+
+        unsigned int num_cmp_pivots[RPU_NUM_COMPONENTS] = { 0 };
+        uint16_t *cmp_pivots[RPU_NUM_COMPONENTS] = { 0 };
+
+        av_log(s, AV_LOG_VERBOSE, "VDR RPU Profile: %"PRIu8", VDR RPU Level: %"PRIu8", VDR Seq. Info Present: %s\n",
+               vdr_rpu_profile, vdr_rpu_level, vdr_seq_info_present ? "yes" : "no");
+
+        if (vdr_seq_info_present) {
+            chroma_resampling_explicit_filter = get_bits1(gb);
+            coefficient_data_type = get_bits(gb, 2);
+
+            switch(coefficient_data_type) {
+            case RPU_COEFF_TYPE_FIXED_PRECISION:
+                {
+                    coefficient_log2_denom = get_ue_golomb_long(gb);
+                }
+                break;
+            case RPU_COEFF_TYPE_FLOAT32:
+                break;
+            default:
+                av_log(s, AV_LOG_ERROR, "Unknown RPU coefficient data type: %"PRIu8"\n",
+                       coefficient_data_type);
+                return;
+            }
+
+            vdr_rpu_normalized_idc = get_bits(gb, 2);
+            bl_video_full_range = get_bits1(gb);
+
+            av_log(s, AV_LOG_VERBOSE, "VDR RPU header values:\n"
+                   "\tchroma_resampling_explicit_filter: %s\n"
+                   "\tcoefficient_data_type: %"PRIu8"\n"
+                   "\tcoefficient_log2_denom: %u\n"
+                   "\tvdr_rpu_normalized_idc: %"PRIu8"\n"
+                   "\tbl_video_full_range: %s\n",
+                   chroma_resampling_explicit_filter ? "yes" : "no",
+                   coefficient_data_type,
+                   coefficient_log2_denom,
+                   vdr_rpu_normalized_idc,
+                   bl_video_full_range ? "yes" : "no");
+
+            if (!(rpu_format & 0x7000)) {
+                BL_bit_depth_minus8  = get_ue_golomb_long(gb);
+                EL_bit_depth_minus8  = get_ue_golomb_long(gb);
+                vdr_bit_depth_minus8 = get_ue_golomb_long(gb);
+
+                spatial_resampling_filter = get_bits1(gb);
+
+                skip_bits(gb, 3);
+
+                el_spatial_resampling_filter = get_bits1(gb);
+
+                disable_residual = get_bits1(gb);
+
+                av_log(s, AV_LOG_VERBOSE, "VDR RPU sequence header values:\n"
+                       "\tBL_bit_depth_minus8: %u\n"
+                       "\tEL_bit_depth_minus8: %u\n"
+                       "\tvdr_bit_depth_minus8: %u\n"
+                       "\tspatial_resampling_filter: %s\n"
+                       "\tel_spatial_resampling_filter: %s\n"
+                       "\tdisable_residual: %s\n",
+                       BL_bit_depth_minus8, EL_bit_depth_minus8,
+                       vdr_bit_depth_minus8,
+                       spatial_resampling_filter ? "yes" : "no",
+                       el_spatial_resampling_filter ? "yes" : "no",
+                       disable_residual ? "yes" : "no");
+            }
+        }
+
+        uint8_t vdr_dm_metadata_present = get_bits1(gb);
+        uint8_t use_prev_vdr_rpu = get_bits1(gb);
+
+        av_log(s, AV_LOG_VERBOSE,
+               "VDR DM metadata present: %s, Utilize previous VDR RPU: %s\n",
+               vdr_dm_metadata_present ? "yes" : "no",
+               use_prev_vdr_rpu ? "yes" : "no");
+
+        if (use_prev_vdr_rpu) {
+            unsigned int prev_vdr_rpu_id = get_ue_golomb_long(gb);
+            av_log(s, AV_LOG_VERBOSE, "Previous VDR RPU to utilize: %u",
+                   prev_vdr_rpu_id);
+            return;
+        }
+
+        unsigned int vdr_rpu_id = get_ue_golomb_long(gb);
+        unsigned int mapping_color_space = get_ue_golomb_long(gb);
+        unsigned int mapping_chroma_format_idc = get_ue_golomb_long(gb);
+
+        av_log(s, AV_LOG_VERBOSE,
+               "New VDR RPU: id: %u, mapping_color_space: %u, mapping_chroma_format_idc: %u\n",
+               vdr_rpu_id, mapping_color_space, mapping_chroma_format_idc);
+
+        for (unsigned int cmp = 0; cmp < RPU_NUM_COMPONENTS; cmp++) {
+            unsigned int num_pivots = num_cmp_pivots[cmp] = get_ue_golomb_long(gb) + 2;
+
+            cmp_pivots[cmp] = av_mallocz(sizeof(uint16_t) * num_pivots);
+
+            for (unsigned int pvt = 0; pvt < num_pivots; pvt++) {
+                uint16_t pivot = cmp_pivots[cmp][pvt] = get_bits(gb, BL_bit_depth_minus8 + 8);
+
+                av_log(s, AV_LOG_VERBOSE, "%s component pivot #%u: %"PRIu16"\n",
+                       cmp == 0 ? "Y" : (cmp == 2 ? "Cb" : "Cr"),
+                       pvt, pivot);
+            }
+        }
+
+        if (!(rpu_format & 0x700) && !disable_residual) {
+            uint8_t nlq_method_idc = get_bits(gb, 3);
+            av_log(s, AV_LOG_VERBOSE, "EL NLQ method idc: %"PRIu8"\n",
+                   nlq_method_idc);
+        }
+
+        unsigned int num_x_partitions = get_ue_golomb_long(gb) + 1;
+        unsigned int num_y_partitions = get_ue_golomb_long(gb) + 1;
+
+        av_log(s, AV_LOG_VERBOSE, "Number of partitions: x: %u, y: %u\n",
+               num_x_partitions, num_y_partitions);
+        /* ^RPU header ends^ */
+
+        /* Actual RPU type 2 data begins */
+        if (!use_prev_vdr_rpu) {
+            /* RPU data mapping */
+
+            for (unsigned int cmp = 0; cmp < RPU_NUM_COMPONENTS; cmp++) {
+                unsigned int num_mappings = num_cmp_pivots[cmp] - 1;
+
+                for (unsigned int map = 0; map < num_mappings; map++)
+                {
+                    unsigned int mapping_method = get_ue_golomb_long(gb);
+
+                    av_log(s, AV_LOG_VERBOSE,
+                           "RPU data mapping: %s mapping method %s for range [%u, %u]\n",
+                           cmp == 0 ? "Y" : (cmp == 2 ? "Cb" : "Cr"),
+                           mapping_method == RPU_MAPPING_POLYNOMIAL ?
+                           "polynomial" : "MMR",
+                           cmp_pivots[cmp][map],
+                           cmp_pivots[cmp][map + 1]);
+                }
+            }
+        }
+    }
+
+}
+
 static int decode_nal_unit(HEVCContext *s, const H2645NAL *nal)
 {
     HEVCLocalContext *lc = s->HEVClc;
@@ -3127,6 +3313,10 @@ static int decode_nal_unit(HEVCContext *s, const H2645NAL *nal)
         break;
     case HEVC_NAL_AUD:
     case HEVC_NAL_FD_NUT:
+        break;
+    case HEVC_NAL_UNSPEC62:
+        /* DoVi RPU NAL unit */
+        dovi_rpu_nal(s, gb);
         break;
     default:
         av_log(s->avctx, AV_LOG_INFO,
