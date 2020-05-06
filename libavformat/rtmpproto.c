@@ -2660,6 +2660,7 @@ static int rtmp_open(URLContext *s, const char *uri, int flags, AVDictionary **o
     }
 
 reconnect:
+    av_dict_set_int(opts, "rw_timeout", s->rw_timeout, 1);
     if ((ret = ffurl_open_whitelist(&rt->stream, buf, AVIO_FLAG_READ_WRITE,
                                     &s->interrupt_callback, opts,
                                     s->protocol_whitelist, s->protocol_blacklist, s)) < 0) {
@@ -2671,6 +2672,10 @@ reconnect:
         if ((ret = rtmp_calc_swfhash(s)) < 0)
             goto fail;
     }
+
+    if (rt->stream->rw_timeout)
+        av_log(s, AV_LOG_WARNING, "R/W timeout was set in TCP to: %"PRId64"\n",
+               rt->stream->rw_timeout);
 
     rt->state = STATE_START;
     if (!rt->listen && (ret = rtmp_handshake(s, rt)) < 0)
