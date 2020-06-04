@@ -279,6 +279,21 @@ static void free_message(void *msg)
         av_packet_unref(&fifo_msg->pkt);
 }
 
+static void fifo_thread_set_last_recovery_ts(FifoThreadContext *ctx, AVPacket *pkt)
+{
+    AVFormatContext *avf = ctx->avf;
+    FifoContext *fifo = avf->priv_data;
+
+    if (fifo->recovery_wait_streamtime) {
+        if (pkt->pts == AV_NOPTS_VALUE)
+            av_log(avf, AV_LOG_WARNING, "Packet does not contain presentation"
+                   " timestamp, recovery will be attempted immediately");
+        ctx->last_recovery_ts = pkt->pts;
+    } else {
+        ctx->last_recovery_ts = av_gettime_relative();
+    }
+}
+
 static int fifo_thread_process_recovery_failure(FifoThreadContext *ctx, AVPacket *pkt,
                                                 int err_no)
 {
@@ -289,14 +304,7 @@ static int fifo_thread_process_recovery_failure(FifoThreadContext *ctx, AVPacket
     av_log(avf, AV_LOG_INFO, "Recovery failed: %s\n",
            av_err2str(err_no));
 
-    if (fifo->recovery_wait_streamtime) {
-        if (pkt->pts == AV_NOPTS_VALUE)
-            av_log(avf, AV_LOG_WARNING, "Packet does not contain presentation"
-                   " timestamp, recovery will be attempted immediately");
-        ctx->last_recovery_ts = pkt->pts;
-    } else {
-        ctx->last_recovery_ts = av_gettime_relative();
-    }
+    fifo_thread_set_last_recovery_ts(ctx, pkt);
 
     if (fifo->max_recovery_attempts &&
         ctx->recovery_nr >= fifo->max_recovery_attempts) {
@@ -329,26 +337,21 @@ static int fifo_thread_attempt_recovery(FifoThreadContext *ctx, FifoMessage *msg
         ctx->header_written = 0;
     }
 
-    if (!ctx->recovery_nr) {
-        ctx->last_recovery_ts = fifo->recovery_wait_streamtime ?
-                                AV_NOPTS_VALUE : 0;
-    } else {
-        if (fifo->recovery_wait_streamtime) {
-            if (ctx->last_recovery_ts == AV_NOPTS_VALUE) {
-                AVRational tb = avf->streams[pkt->stream_index]->time_base;
-                time_since_recovery = av_rescale_q(pkt->pts - ctx->last_recovery_ts,
-                                                   tb, AV_TIME_BASE_Q);
-            } else {
-                /* Enforce recovery immediately */
-                time_since_recovery = fifo->recovery_wait_time;
-            }
+    if (fifo->recovery_wait_streamtime) {
+        if (ctx->last_recovery_ts == AV_NOPTS_VALUE) {
+            AVRational tb = avf->streams[pkt->stream_index]->time_base;
+            time_since_recovery = av_rescale_q(pkt->pts - ctx->last_recovery_ts,
+                                               tb, AV_TIME_BASE_Q);
         } else {
-            time_since_recovery = av_gettime_relative() - ctx->last_recovery_ts;
+            /* Enforce recovery immediately */
+            time_since_recovery = fifo->recovery_wait_time;
         }
-
-        if (time_since_recovery < fifo->recovery_wait_time)
-            return AVERROR(EAGAIN);
+    } else {
+        time_since_recovery = av_gettime_relative() - ctx->last_recovery_ts;
     }
+
+    if (time_since_recovery < fifo->recovery_wait_time)
+        return AVERROR(EAGAIN);
 
     ctx->recovery_nr++;
 
@@ -372,6 +375,7 @@ static int fifo_thread_attempt_recovery(FifoThreadContext *ctx, FifoMessage *msg
         }
     } else {
         av_log(avf, AV_LOG_INFO, "Recovery successful\n");
+        fifo_thread_set_last_recovery_ts(ctx, pkt);
         ctx->recovery_nr = 0;
     }
 
@@ -389,7 +393,7 @@ static int fifo_thread_recover(FifoThreadContext *ctx, FifoMessage *msg, int err
     int ret;
 
     do {
-        if (!fifo->recovery_wait_streamtime && ctx->recovery_nr > 0) {
+        if (!fifo->recovery_wait_streamtime) {
             int64_t time_since_recovery = av_gettime_relative() - ctx->last_recovery_ts;
             int64_t time_to_wait = FFMAX(0, fifo->recovery_wait_time - time_since_recovery);
             if (time_to_wait)
@@ -420,6 +424,8 @@ static void *fifo_consumer_thread(void *data)
     memset(&fifo_thread_ctx, 0, sizeof(FifoThreadContext));
     fifo_thread_ctx.avf = avf;
     fifo_thread_ctx.last_received_dts = AV_NOPTS_VALUE;
+    fifo_thread_ctx.last_recovery_ts = fifo->recovery_wait_streamtime ?
+                                       AV_NOPTS_VALUE : 0;
 
     while (1) {
         uint8_t just_flushed = 0;
