@@ -1772,7 +1772,9 @@ FF_ENABLE_DEPRECATION_WARNINGS
                  if (av_get_channel_layout_nb_channels(avctx->channel_layout) !=
                      avctx->channels) {
                      av_log(avctx, AV_LOG_ERROR, "Inconsistent channel "
-                            "configuration.\n");
+                            "configuration (channel_layout: %"PRIu64" (is_22dot2? %s), channel_count: %d) .\n",
+                            avctx->channel_layout, avctx->channel_layout == AV_CH_LAYOUT_22POINT2 ? "yes" : "no",
+                            avctx->channels);
                      return AVERROR(EINVAL);
                  }
 
