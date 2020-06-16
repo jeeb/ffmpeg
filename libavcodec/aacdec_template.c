@@ -196,6 +196,17 @@ struct elem_to_channel {
     uint8_t aac_position;
 };
 
+static void log_e2c(int num, struct elem_to_channel e2c) {
+    av_log(NULL, AV_LOG_DEBUG, "tag %d = { pos: %s (%"PRIx64"), syn_elem: %s, elem_id: %"PRIu8" }\n",
+           num,
+           av_get_channel_name(e2c.av_position),
+           e2c.av_position,
+           e2c.syn_ele == TYPE_SCE ? "SCE" :
+           e2c.syn_ele == TYPE_CPE ? "CPE" :
+           e2c.syn_ele == TYPE_LFE ? "LFE" : "<unknown>",
+           e2c.elem_id);
+}
+
 static int assign_pair(struct elem_to_channel e2c_vec[MAX_ELEM_ID],
                        uint8_t (*layout_map)[3], int offset, uint64_t left,
                        uint64_t right, int pos)
@@ -207,6 +218,7 @@ static int assign_pair(struct elem_to_channel e2c_vec[MAX_ELEM_ID],
             .elem_id      = layout_map[offset][1],
             .aac_position = pos
         };
+        log_e2c(offset, e2c_vec[offset]);
         return 1;
     } else {
         e2c_vec[offset] = (struct elem_to_channel) {
@@ -221,6 +233,8 @@ static int assign_pair(struct elem_to_channel e2c_vec[MAX_ELEM_ID],
             .elem_id      = layout_map[offset + 1][1],
             .aac_position = pos
         };
+        log_e2c(offset, e2c_vec[offset]);
+        log_e2c(offset + 1, e2c_vec[offset + 1]);
         return 2;
     }
 }
@@ -281,6 +295,9 @@ static uint64_t sniff_channel_order(uint8_t (*layout_map)[3], int tags)
     if (num_back_channels < 0)
         return 0;
 
+    av_log(NULL, AV_LOG_DEBUG, "AAC %s: tags: %d channel counts: front: %d, side: %d, back: %d\n",
+           __func__, tags, num_front_channels, num_side_channels, num_back_channels);
+
     if (num_side_channels == 0 && num_back_channels >= 4) {
         num_side_channels = 2;
         num_back_channels -= 2;
@@ -294,6 +311,7 @@ static uint64_t sniff_channel_order(uint8_t (*layout_map)[3], int tags)
             .elem_id      = layout_map[i][1],
             .aac_position = AAC_CHANNEL_FRONT
         };
+        log_e2c(i, e2c_vec[i]);
         i++;
         num_front_channels--;
     }
@@ -355,6 +373,7 @@ static uint64_t sniff_channel_order(uint8_t (*layout_map)[3], int tags)
             .elem_id      = layout_map[i][1],
             .aac_position = AAC_CHANNEL_BACK
         };
+        log_e2c(i, e2c_vec[i]);
         i++;
         num_back_channels--;
     }
@@ -366,6 +385,7 @@ static uint64_t sniff_channel_order(uint8_t (*layout_map)[3], int tags)
             .elem_id      = layout_map[i][1],
             .aac_position = AAC_CHANNEL_LFE
         };
+        log_e2c(i, e2c_vec[i]);
         i++;
     }
     if (i < tags && layout_map[i][2] == AAC_CHANNEL_LFE) {
@@ -375,6 +395,7 @@ static uint64_t sniff_channel_order(uint8_t (*layout_map)[3], int tags)
             .elem_id      = layout_map[i][1],
             .aac_position = AAC_CHANNEL_LFE
         };
+        log_e2c(i, e2c_vec[i]);
         i++;
     }
     while (i < tags && layout_map[i][2] == AAC_CHANNEL_LFE) {
@@ -471,6 +492,9 @@ static uint64_t sniff_channel_order(uint8_t (*layout_map)[3], int tags)
         }
         log_e2c(i, e2c_vec[i]);
     }
+
+    av_log(NULL, AV_LOG_DEBUG, "AAC %s layout: %"PRIx64"\n",
+           __func__, layout);
 
     return layout;
 }
@@ -629,13 +653,22 @@ static int set_default_channel_config(AACContext *ac, AVCodecContext *avctx,
     return 0;
 }
 
+#define TYPE_TO_STR(type_int) ((type_int) == TYPE_SCE ? "SCE" : (type_int) == TYPE_CPE ? "CPE" : (type_int) == TYPE_LFE ? "LFE" : "<unknown>" )
+
 static ChannelElement *get_che(AACContext *ac, int type, int elem_id)
 {
     /* For PCE based channel configurations map the channels solely based
      * on tags. */
     if (!ac->oc[1].m4ac.chan_config) {
+        av_log(ac->avctx, AV_LOG_DEBUG,
+               "no chan_config yet, base on tag channel mapping for "
+               "type: %d, elem_id: %d\n", type, elem_id);
         return ac->tag_che_map[type][elem_id];
     }
+
+    av_log(ac->avctx, AV_LOG_DEBUG, "Entry values: tags_mapped: %d, type: %s, "
+                                    "elem_id: %d\n",
+           ac->tags_mapped, TYPE_TO_STR(type), elem_id);
     // Allow single CPE stereo files to be signalled with mono configuration.
     if (!ac->tags_mapped && type == TYPE_CPE &&
         ac->oc[1].m4ac.chan_config == 1) {
