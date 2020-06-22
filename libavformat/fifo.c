@@ -338,7 +338,8 @@ static int fifo_thread_attempt_recovery(FifoThreadContext *ctx, FifoMessage *msg
     }
 
     if (fifo->recovery_wait_streamtime) {
-        if (ctx->last_recovery_ts == AV_NOPTS_VALUE) {
+        if (ctx->last_recovery_ts == AV_NOPTS_VALUE ||
+            pkt->pts < ctx->last_recovery_ts) {
             /* Enforce recovery immediately */
             time_since_recovery = fifo->recovery_wait_time;
         } else {
