@@ -339,12 +339,12 @@ static int fifo_thread_attempt_recovery(FifoThreadContext *ctx, FifoMessage *msg
 
     if (fifo->recovery_wait_streamtime) {
         if (ctx->last_recovery_ts == AV_NOPTS_VALUE) {
+            /* Enforce recovery immediately */
+            time_since_recovery = fifo->recovery_wait_time;
+        } else {
             AVRational tb = avf->streams[pkt->stream_index]->time_base;
             time_since_recovery = av_rescale_q(pkt->pts - ctx->last_recovery_ts,
                                                tb, AV_TIME_BASE_Q);
-        } else {
-            /* Enforce recovery immediately */
-            time_since_recovery = fifo->recovery_wait_time;
         }
     } else {
         time_since_recovery = av_gettime_relative() - ctx->last_recovery_ts;
