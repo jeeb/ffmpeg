@@ -459,6 +459,8 @@ static uint64_t sniff_channel_order(uint8_t (*layout_map)[3], int tags)
 
     }
 
+    av_log(NULL, AV_LOG_DEBUG, "Setting layout map list after reorder...\n");
+
     layout = 0;
     for (i = 0; i < total_non_cc_elements; i++) {
         layout_map[i][0] = e2c_vec[i].syn_ele;
@@ -467,6 +469,7 @@ static uint64_t sniff_channel_order(uint8_t (*layout_map)[3], int tags)
         if (e2c_vec[i].av_position != UINT64_MAX) {
             layout |= e2c_vec[i].av_position;
         }
+        log_e2c(i, e2c_vec[i]);
     }
 
     return layout;
