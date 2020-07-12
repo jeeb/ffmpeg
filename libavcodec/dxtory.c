@@ -115,7 +115,7 @@ static int dxtory_decode_v1_420(AVCodecContext *avctx, AVFrame *pic,
         return AVERROR_INVALIDDATA;
     }
 
-    avctx->pix_fmt = AV_PIX_FMT_YUV420P;
+    avctx->pix_fmt = AV_PIX_FMT_YUVJ420P;
     if ((ret = ff_get_buffer(avctx, pic, 0)) < 0)
         return ret;
 
@@ -152,7 +152,7 @@ static int dxtory_decode_v1_444(AVCodecContext *avctx, AVFrame *pic,
         return AVERROR_INVALIDDATA;
     }
 
-    avctx->pix_fmt = AV_PIX_FMT_YUV444P;
+    avctx->pix_fmt = AV_PIX_FMT_YUVJ444P;
     if ((ret = ff_get_buffer(avctx, pic, 0)) < 0)
         return ret;
 
@@ -516,7 +516,7 @@ static int dxtory_decode_v2_420(AVCodecContext *avctx, AVFrame *pic,
     return dxtory_decode_v2(avctx, pic, src, src_size,
                             dx2_decode_slice_420,
                             default_setup_lru,
-                            AV_PIX_FMT_YUV420P);
+                            AV_PIX_FMT_YUVJ420P);
 }
 
 static int dx2_decode_slice_444(GetBitContext *gb, AVFrame *frame,
@@ -556,7 +556,7 @@ static int dxtory_decode_v2_444(AVCodecContext *avctx, AVFrame *pic,
     return dxtory_decode_v2(avctx, pic, src, src_size,
                             dx2_decode_slice_444,
                             default_setup_lru,
-                            AV_PIX_FMT_YUV444P);
+                            AV_PIX_FMT_YUVJ444P);
 }
 
 static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
