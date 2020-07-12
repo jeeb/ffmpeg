@@ -24,6 +24,7 @@
 
 #include "libavutil/common.h"
 #include "libavutil/intreadwrite.h"
+#include "libavutil/pixdesc.h"
 
 #define BITSTREAM_READER_LE
 #include "avcodec.h"
@@ -563,6 +564,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
 {
     AVFrame *pic = data;
     const uint8_t *src = avpkt->data;
+    const AVPixFmtDescriptor *pixdesc = NULL;
     int ret;
 
     if (avpkt->size < 16) {
@@ -620,6 +622,16 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
     if (ret)
         return ret;
 
+    pixdesc = av_pix_fmt_desc_get(pic->format);
+    if (pixdesc && !(pixdesc->flags & AV_PIX_FMT_FLAG_RGB)) {
+        // No exact version checks have been done, but according to testing with
+        // a user, all of the YCbCr output from dxtory's capture tooling seems
+        // to be full range, which makes sense (similar to FRAPS). The RGB to YCbCr
+        // conversion seems to be done through BT.601 regardless of resolution,
+        // so flag it as such.
+        pic->color_range = AVCOL_RANGE_JPEG;
+        pic->colorspace = AVCOL_SPC_BT470BG;
+    }
     pic->pict_type = AV_PICTURE_TYPE_I;
     pic->key_frame = 1;
     *got_frame = 1;
