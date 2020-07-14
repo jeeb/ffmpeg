@@ -513,6 +513,18 @@ static int fifo_mux_init(AVFormatContext *avf, ff_const59 AVOutputFormat *oforma
         ret = ff_stream_encode_params_copy(st, avf->streams[i]);
         if (ret < 0)
             return ret;
+
+        if ((st->codecpar->codec_tag && oformat->codec_tag) &&
+            av_codec_get_id(oformat->codec_tag, st->codecpar->codec_tag) != st->codecpar->codec_id) {
+            av_log(avf, AV_LOG_ERROR,
+                   "Codec tag '%s' is unsupported for codec %s in the %s muxer! "
+                   "Unsetting codec tag so that auto-configuration can be "
+                   "attempted.\n",
+                   av_fourcc2str(st->codecpar->codec_tag),
+                   avcodec_get_name(st->codecpar->codec_id),
+                   avf2->oformat->name);
+            st->codecpar->codec_tag = 0;
+        }
     }
 
     return 0;
