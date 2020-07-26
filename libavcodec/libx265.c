@@ -81,6 +81,8 @@ typedef struct libx265Context {
      * encounter a frame with ROI side data.
      */
     int roi_warned;
+
+    char *multipass_log_file;
 } libx265Context;
 
 static int is_keyframe(NalUnitType naltype)
@@ -348,6 +350,13 @@ static av_cold int libx265_encode_init(AVCodecContext *avctx)
         ret = libx265_param_parse_int(avctx, "qp", ctx->cqp);
         if (ret < 0)
             return ret;
+    }
+
+    ctx->params->rc.bStatWrite = !!(avctx->flags & AV_CODEC_FLAG_PASS1);
+    ctx->params->rc.bStatRead = !!(avctx->flags & AV_CODEC_FLAG_PASS2);
+
+    if (ctx->multipass_log_file) {
+        ctx->api->param_parse(ctx->params, "stats", ctx->multipass_log_file);
     }
 
     if (avctx->qmin >= 0) {
@@ -862,6 +871,7 @@ static const AVOption options[] = {
     { "udu_sei",     "Use user data unregistered SEI if available",                                 OFFSET(udu_sei),   AV_OPT_TYPE_BOOL,   { .i64 = 0 }, 0, 1, VE },
     { "a53cc",       "Use A53 Closed Captions (if available)",                                      OFFSET(a53_cc),    AV_OPT_TYPE_BOOL,   { .i64 = 1 }, 0, 1, VE },
     { "x265-params", "set the x265 configuration using a :-separated list of key=value parameters", OFFSET(x265_opts), AV_OPT_TYPE_DICT,   { 0 }, 0, 0, VE },
+    { "passlogfile", "File name for multi-pass stats",                                              OFFSET(multipass_log_file), AV_OPT_TYPE_STRING, { 0 }, 0, 0, VE },
     { NULL }
 };
 
