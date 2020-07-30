@@ -170,6 +170,14 @@ av_cold int swr_build_matrix(uint64_t in_ch_layout_param, uint64_t out_ch_layout
 
     unaccounted= in_ch_layout & ~out_ch_layout;
 
+    if (unaccounted) {
+        av_get_channel_layout_string(buf, sizeof(buf), -1, unaccounted);
+        av_log(log_context, AV_LOG_VERBOSE,
+               "The following channels were unaccounted between effective "
+               "input and output layouts: '%s'\n",
+               buf);
+    }
+
 //FIXME implement dolby surround
 //FIXME implement full ac3
 
