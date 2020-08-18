@@ -266,6 +266,22 @@ static int count_paired_channels(uint8_t (*layout_map)[3], int tags, int pos,
     return num_pos_channels;
 }
 
+static void log_e2c(int num, struct elem_to_channel e2c) {
+    char buf[128] = { 0 };
+
+    av_get_channel_layout_string(buf, sizeof(buf), -1, e2c.av_position);
+
+    av_log(NULL, AV_LOG_DEBUG,
+           "tag %d = { position(s): %s (0x%"PRIx64"), syn_elem: %s, elem_id: %"PRIu8" }\n",
+           num,
+           e2c.av_position == UINT64_MAX ? "Unset/Ignored" : buf,
+           e2c.av_position,
+           e2c.syn_ele == TYPE_SCE ? "SCE" :
+           e2c.syn_ele == TYPE_CPE ? "CPE" :
+           e2c.syn_ele == TYPE_LFE ? "LFE" : "<unknown>",
+           e2c.elem_id);
+}
+
 #define PREFIX_FOR_22POINT2 (AV_CH_LAYOUT_7POINT1_WIDE_BACK|AV_CH_BACK_CENTER|AV_CH_SIDE_LEFT|AV_CH_SIDE_RIGHT|AV_CH_LOW_FREQUENCY_2)
 static uint64_t sniff_channel_order(uint8_t (*layout_map)[3], int tags)
 {
@@ -460,6 +476,11 @@ end_of_layout_definition:
 
     total_non_cc_elements = n = i;
 
+    av_log(NULL, AV_LOG_DEBUG, "Element order before reorder:\n");
+    for (i = 0; i < n; i++) {
+        log_e2c(i, e2c_vec[i]);
+    }
+
     if (layout == AV_CH_LAYOUT_22POINT2) {
         // For 22.2 reorder the result as needed
         FFSWAP(struct elem_to_channel, e2c_vec[2], e2c_vec[0]);   // FL & FR first (final), FC third
@@ -484,6 +505,11 @@ end_of_layout_definition:
             n = next_n;
         } while (n > 0);
 
+    }
+
+    av_log(NULL, AV_LOG_DEBUG, "Element order after reorder:\n");
+    for (i = 0; i < total_non_cc_elements; i++) {
+        log_e2c(i, e2c_vec[i]);
     }
 
     for (i = 0; i < total_non_cc_elements; i++) {
