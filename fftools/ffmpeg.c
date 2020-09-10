@@ -897,6 +897,28 @@ static int check_recording_time(OutputStream *ost)
     return 1;
 }
 
+static int init_output_stream(OutputStream *ost, char *error, int error_len);
+
+static int init_output_stream_wrapper(OutputStream *ost, unsigned int fatal)
+{
+    int ret = AVERROR_BUG;
+    char error[1024] = {0};
+
+    if (ost->initialized)
+        return 0;
+
+    ret = init_output_stream(ost, error, sizeof(error));
+    if (ret < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Error initializing output stream %d:%d -- %s\n",
+               ost->file_index, ost->index, error);
+
+        if (fatal)
+            exit_program(1);
+    }
+
+    return ret;
+}
+
 static void do_audio_out(OutputFile *of, OutputStream *ost,
                          AVFrame *frame)
 {
@@ -907,6 +929,8 @@ static void do_audio_out(OutputFile *of, OutputStream *ost,
     av_init_packet(&pkt);
     pkt.data = NULL;
     pkt.size = 0;
+
+    init_output_stream_wrapper(ost, 1);
 
     if (!check_recording_time(ost))
         return;
@@ -1056,6 +1080,8 @@ static void do_video_out(OutputFile *of,
     int frame_size = 0;
     InputStream *ist = NULL;
     AVFilterContext *filter = ost->filter->filter;
+
+    init_output_stream_wrapper(ost, 1);
 
     if (ost->source_index >= 0)
         ist = input_streams[ost->source_index];
@@ -1390,28 +1416,6 @@ static void do_video_stats(OutputStream *ost, int frame_size)
     }
 }
 
-static int init_output_stream(OutputStream *ost, char *error, int error_len);
-
-static int init_output_stream_wrapper(OutputStream *ost, unsigned int fatal)
-{
-    int ret = AVERROR_BUG;
-    char error[1024] = {0};
-
-    if (ost->initialized)
-        return 0;
-
-    ret = init_output_stream(ost, error, sizeof(error));
-    if (ret < 0) {
-        av_log(NULL, AV_LOG_ERROR, "Error initializing output stream %d:%d -- %s\n",
-               ost->file_index, ost->index, error);
-
-        if (fatal)
-            exit_program(1);
-    }
-
-    return ret;
-}
-
 static void finish_output_stream(OutputStream *ost)
 {
     OutputFile *of = output_files[ost->file_index];
@@ -1447,8 +1451,6 @@ static int reap_filters(int flush)
         if (!ost->filter || !ost->filter->graph->graph)
             continue;
         filter = ost->filter->filter;
-
-        init_output_stream_wrapper(ost, 1);
 
         if (!ost->filtered_frame && !(ost->filtered_frame = av_frame_alloc())) {
             return AVERROR(ENOMEM);
@@ -3669,10 +3671,15 @@ static int transcode_init(void)
             goto dump_format;
         }
 
-    /* open each encoder */
+    /*
+     * initialize stream copy and subtitle/data streams - encoded AVFrame
+     * based streams will get initialized when the first AVFrames are
+     * received via do_{audio,video}_out
+     */
     for (i = 0; i < nb_output_streams; i++) {
-        // skip streams fed from filtergraphs until we have a frame for them
-        if (output_streams[i]->filter)
+        if (!output_streams[i]->stream_copy &&
+            (output_streams[i]->enc_ctx->codec_type == AVMEDIA_TYPE_VIDEO ||
+             output_streams[i]->enc_ctx->codec_type == AVMEDIA_TYPE_AUDIO))
             continue;
 
         ret = init_output_stream_wrapper(output_streams[i], 0);
@@ -4586,8 +4593,6 @@ static int transcode_step(void)
     }
 
     if (ost->filter && ost->filter->graph->graph) {
-        init_output_stream_wrapper(ost, 1);
-
         if ((ret = transcode_from_filter(ost->filter->graph, &ist)) < 0)
             return ret;
         if (!ist)
