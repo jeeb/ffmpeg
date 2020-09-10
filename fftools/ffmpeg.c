@@ -938,9 +938,11 @@ early_exit:
     return float_pts;
 }
 
-static int init_output_stream(OutputStream *ost, char *error, int error_len);
+static int init_output_stream(OutputStream *ost, AVFrame *frame,
+                              char *error, int error_len);
 
-static int init_output_stream_wrapper(OutputStream *ost, unsigned int fatal)
+static int init_output_stream_wrapper(OutputStream *ost, AVFrame *frame,
+                                      unsigned int fatal)
 {
     int ret = AVERROR_BUG;
     char error[1024] = {0};
@@ -948,7 +950,7 @@ static int init_output_stream_wrapper(OutputStream *ost, unsigned int fatal)
     if (ost->initialized)
         return 0;
 
-    ret = init_output_stream(ost, error, sizeof(error));
+    ret = init_output_stream(ost, frame, error, sizeof(error));
     if (ret < 0) {
         av_log(NULL, AV_LOG_ERROR, "Error initializing output stream %d:%d -- %s\n",
                ost->file_index, ost->index, error);
@@ -1122,7 +1124,7 @@ static void do_video_out(OutputFile *of,
     InputStream *ist = NULL;
     AVFilterContext *filter = ost->filter->filter;
 
-    init_output_stream_wrapper(ost, 1);
+    init_output_stream_wrapper(ost, next_picture, 1);
     sync_ipts = adjust_frame_pts_to_encoder_tb(of, ost, next_picture);
 
     if (ost->source_index >= 0)
@@ -1504,7 +1506,7 @@ static int reap_filters(int flush)
          * the encoder earlier than receiving the first AVFrame.
          */
         if (av_buffersink_get_type(filter) == AVMEDIA_TYPE_AUDIO)
-            init_output_stream_wrapper(ost, 1);
+            init_output_stream_wrapper(ost, NULL, 1);
 
         if (!ost->filtered_frame && !(ost->filtered_frame = av_frame_alloc())) {
             return AVERROR(ENOMEM);
@@ -1927,7 +1929,7 @@ static void flush_encoders(void)
                 finish_output_stream(ost);
             }
 
-            init_output_stream_wrapper(ost, 1);
+            init_output_stream_wrapper(ost, NULL, 1);
         }
 
         if (enc->codec_type != AVMEDIA_TYPE_VIDEO && enc->codec_type != AVMEDIA_TYPE_AUDIO)
@@ -3299,7 +3301,7 @@ static void init_encoder_time_base(OutputStream *ost, AVRational default_time_ba
     enc_ctx->time_base = default_time_base;
 }
 
-static int init_output_stream_encode(OutputStream *ost)
+static int init_output_stream_encode(OutputStream *ost, AVFrame *frame)
 {
     InputStream *ist = get_input_stream(ost);
     AVCodecContext *enc_ctx = ost->enc_ctx;
@@ -3396,6 +3398,23 @@ static int init_output_stream_encode(OutputStream *ost)
             enc_ctx->bits_per_raw_sample = FFMIN(dec_ctx->bits_per_raw_sample,
                                                  av_pix_fmt_desc_get(enc_ctx->pix_fmt)->comp[0].depth);
 
+        if (frame) {
+            if (!av_dict_get(ost->encoder_opts, "color_range", NULL, 0))
+                enc_ctx->color_range = frame->color_range;
+
+            if (!av_dict_get(ost->encoder_opts, "color_primaries", NULL, 0))
+                enc_ctx->color_primaries = frame->color_primaries;
+
+            if (!av_dict_get(ost->encoder_opts, "color_trc", NULL, 0))
+                enc_ctx->color_trc = frame->color_trc;
+
+            if (!av_dict_get(ost->encoder_opts, "colorspace", NULL, 0))
+                enc_ctx->colorspace = frame->colorspace;
+
+            if (!av_dict_get(ost->encoder_opts, "chroma_sample_location", NULL, 0))
+                enc_ctx->chroma_sample_location = frame->chroma_location;
+        }
+
         enc_ctx->framerate = ost->frame_rate;
 
         ost->st->avg_frame_rate = ost->frame_rate;
@@ -3453,7 +3472,8 @@ static int init_output_stream_encode(OutputStream *ost)
     return 0;
 }
 
-static int init_output_stream(OutputStream *ost, char *error, int error_len)
+static int init_output_stream(OutputStream *ost, AVFrame *frame,
+                              char *error, int error_len)
 {
     int ret = 0;
 
@@ -3462,7 +3482,7 @@ static int init_output_stream(OutputStream *ost, char *error, int error_len)
         AVCodecContext *dec = NULL;
         InputStream *ist;
 
-        ret = init_output_stream_encode(ost);
+        ret = init_output_stream_encode(ost, frame);
         if (ret < 0)
             return ret;
 
@@ -3714,7 +3734,7 @@ static int transcode_init(void)
              output_streams[i]->enc_ctx->codec_type == AVMEDIA_TYPE_AUDIO))
             continue;
 
-        ret = init_output_stream_wrapper(output_streams[i], 0);
+        ret = init_output_stream_wrapper(output_streams[i], NULL, 0);
         if (ret < 0)
             goto dump_format;
     }
@@ -4647,7 +4667,7 @@ static int transcode_step(void)
          * early encoder initialization.
          */
         if (av_buffersink_get_type(ost->filter->filter) == AVMEDIA_TYPE_AUDIO)
-            init_output_stream_wrapper(ost, 1);
+            init_output_stream_wrapper(ost, NULL, 1);
 
         if ((ret = transcode_from_filter(ost->filter->graph, &ist)) < 0)
             return ret;
