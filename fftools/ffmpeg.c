@@ -3281,6 +3281,20 @@ static int init_output_stream_encode(OutputStream *ost, AVFrame *frame)
     AVFormatContext *oc = output_files[ost->file_index]->ctx;
     int j, ret;
 
+    if ((enc_ctx->codec_type == AVMEDIA_TYPE_VIDEO ||
+         enc_ctx->codec_type == AVMEDIA_TYPE_AUDIO) &&
+        !frame) {
+        const AVCodecDescriptor *description = \
+            avcodec_descriptor_get(ost->enc_ctx->codec_id);
+
+        av_log(NULL, AV_LOG_WARNING,
+               "Initializing %s output stream %d:%d (%s) without an available "
+               "AVFrame! Possibility of less accurate configuration!\n",
+               av_get_media_type_string(enc_ctx->codec_type),
+               ost->file_index, ost->index,
+               description ? description->name : "no encoder");
+    }
+
     set_encoder_id(output_files[ost->file_index], ost);
 
     // Muxers use AV_PKT_DATA_DISPLAYMATRIX to signal rotation. On the other
