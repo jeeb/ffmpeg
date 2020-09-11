@@ -1452,6 +1452,9 @@ static int reap_filters(int flush)
             continue;
         filter = ost->filter->filter;
 
+        if (ost->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
+            init_output_stream_wrapper(ost, 1);
+
         if (!ost->filtered_frame && !(ost->filtered_frame = av_frame_alloc())) {
             return AVERROR(ENOMEM);
         }
