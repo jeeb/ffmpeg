@@ -1509,7 +1509,8 @@ static int reap_filters(int flush)
                 do_video_out(of, ost, filtered_frame, float_pts);
                 break;
             case AVMEDIA_TYPE_AUDIO:
-                if (!(enc->codec->capabilities & AV_CODEC_CAP_PARAM_CHANGE) &&
+                if (ost->initialized &&
+                    !(enc->codec->capabilities & AV_CODEC_CAP_PARAM_CHANGE) &&
                     enc->channels != filtered_frame->channels) {
                     av_log(NULL, AV_LOG_ERROR,
                            "Audio filter graph output is not normalized and encoder does not support parameter changes\n");
