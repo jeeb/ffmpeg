@@ -919,6 +919,55 @@ static int init_output_stream_wrapper(OutputStream *ost, unsigned int fatal)
     return ret;
 }
 
+static double adjust_frame_pts_to_encoder_tb(OutputFile *of, OutputStream *ost,
+                                             AVFrame *frame)
+{
+    if (!frame || frame->pts == AV_NOPTS_VALUE ||
+        !ost->filter || !ost->filter->graph->graph)
+        return AV_NOPTS_VALUE;
+
+    double float_pts = AV_NOPTS_VALUE; // this is identical to frame.pts but with higher precision
+    AVFilterContext *filter = ost->filter->filter;
+    AVCodecContext *enc = ost->enc_ctx;
+
+    int64_t start_time = (of->start_time == AV_NOPTS_VALUE) ? 0 : of->start_time;
+    AVRational filter_tb = av_buffersink_get_time_base(filter);
+    AVRational tb = enc->time_base;
+    int extra_bits = av_clip(29 - av_log2(tb.den), 0, 16);
+
+    tb.den <<= extra_bits;
+    av_log(NULL, AV_LOG_VERBOSE,
+           "%s: frame pts: %"PRId64" start_time: %"PRId64", "
+           "filter_tb: %d/%d, tb: %d/%d\n",
+           __FUNCTION__, frame->pts, start_time,
+           filter_tb.num, filter_tb.den,
+           tb.num, tb.den);
+
+    float_pts =
+        av_rescale_q(frame->pts, filter_tb, tb) -
+        av_rescale_q(start_time, AV_TIME_BASE_Q, tb);
+    float_pts /= 1 << extra_bits;
+    // avoid exact midoints to reduce the chance of rounding differences, this can be removed in case the fps code is changed to work with integers
+    float_pts += FFSIGN(float_pts) * 1.0 / (1<<17);
+
+    frame->pts =
+        av_rescale_q(frame->pts, filter_tb, enc->time_base) -
+        av_rescale_q(start_time, AV_TIME_BASE_Q, enc->time_base);
+
+    av_log(NULL, AV_LOG_VERBOSE,
+           "%s: post-adjustment PTS: %"PRId64"\n",
+           __FUNCTION__, frame->pts);
+
+    if (debug_ts) {
+        av_log(NULL, AV_LOG_INFO, "filter -> pts:%s pts_time:%s exact:%f time_base:%d/%d\n",
+                av_ts2str(frame->pts), av_ts2timestr(frame->pts, &enc->time_base),
+                float_pts,
+                enc->time_base.num, enc->time_base.den);
+    }
+
+    return float_pts;
+}
+
 static void do_audio_out(OutputFile *of, OutputStream *ost,
                          AVFrame *frame)
 {
@@ -931,6 +980,7 @@ static void do_audio_out(OutputFile *of, OutputStream *ost,
     pkt.size = 0;
 
     init_output_stream_wrapper(ost, 1);
+    adjust_frame_pts_to_encoder_tb(of, ost, frame);
 
     if (!check_recording_time(ost))
         return;
@@ -1066,8 +1116,7 @@ static void do_subtitle_out(OutputFile *of,
 
 static void do_video_out(OutputFile *of,
                          OutputStream *ost,
-                         AVFrame *next_picture,
-                         double sync_ipts)
+                         AVFrame *next_picture)
 {
     int ret, format_video_sync;
     AVPacket pkt;
@@ -1077,11 +1126,13 @@ static void do_video_out(OutputFile *of,
     int nb_frames, nb0_frames, i;
     double delta, delta0;
     double duration = 0;
+    double sync_ipts = AV_NOPTS_VALUE;
     int frame_size = 0;
     InputStream *ist = NULL;
     AVFilterContext *filter = ost->filter->filter;
 
     init_output_stream_wrapper(ost, 1);
+    sync_ipts = adjust_frame_pts_to_encoder_tb(of, ost, next_picture);
 
     if (ost->source_index >= 0)
         ist = input_streams[ost->source_index];
@@ -1461,7 +1512,6 @@ static int reap_filters(int flush)
         filtered_frame = ost->filtered_frame;
 
         while (1) {
-            double float_pts = AV_NOPTS_VALUE; // this is identical to filtered_frame.pts but with higher precision
             ret = av_buffersink_get_frame_flags(filter, filtered_frame,
                                                AV_BUFFERSINK_FLAG_NO_REQUEST);
             if (ret < 0) {
@@ -1470,7 +1520,7 @@ static int reap_filters(int flush)
                            "Error in av_buffersink_get_frame_flags(): %s\n", av_err2str(ret));
                 } else if (flush && ret == AVERROR_EOF) {
                     if (av_buffersink_get_type(filter) == AVMEDIA_TYPE_VIDEO)
-                        do_video_out(of, ost, NULL, AV_NOPTS_VALUE);
+                        do_video_out(of, ost, NULL);
                 }
                 break;
             }
@@ -1478,38 +1528,13 @@ static int reap_filters(int flush)
                 av_frame_unref(filtered_frame);
                 continue;
             }
-            if (filtered_frame->pts != AV_NOPTS_VALUE) {
-                int64_t start_time = (of->start_time == AV_NOPTS_VALUE) ? 0 : of->start_time;
-                AVRational filter_tb = av_buffersink_get_time_base(filter);
-                AVRational tb = enc->time_base;
-                int extra_bits = av_clip(29 - av_log2(tb.den), 0, 16);
-
-                tb.den <<= extra_bits;
-                float_pts =
-                    av_rescale_q(filtered_frame->pts, filter_tb, tb) -
-                    av_rescale_q(start_time, AV_TIME_BASE_Q, tb);
-                float_pts /= 1 << extra_bits;
-                // avoid exact midoints to reduce the chance of rounding differences, this can be removed in case the fps code is changed to work with integers
-                float_pts += FFSIGN(float_pts) * 1.0 / (1<<17);
-
-                filtered_frame->pts =
-                    av_rescale_q(filtered_frame->pts, filter_tb, enc->time_base) -
-                    av_rescale_q(start_time, AV_TIME_BASE_Q, enc->time_base);
-            }
 
             switch (av_buffersink_get_type(filter)) {
             case AVMEDIA_TYPE_VIDEO:
                 if (!ost->frame_aspect_ratio.num)
                     enc->sample_aspect_ratio = filtered_frame->sample_aspect_ratio;
 
-                if (debug_ts) {
-                    av_log(NULL, AV_LOG_INFO, "filter -> pts:%s pts_time:%s exact:%f time_base:%d/%d\n",
-                            av_ts2str(filtered_frame->pts), av_ts2timestr(filtered_frame->pts, &enc->time_base),
-                            float_pts,
-                            enc->time_base.num, enc->time_base.den);
-                }
-
-                do_video_out(of, ost, filtered_frame, float_pts);
+                do_video_out(of, ost, filtered_frame);
                 break;
             case AVMEDIA_TYPE_AUDIO:
                 if (ost->initialized &&
