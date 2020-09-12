@@ -4622,6 +4622,24 @@ static int transcode_step(void)
     }
 
     if (ost->filter && ost->filter->graph->graph) {
+        // FIXME:
+        // Audio is special in ffmpeg.c currently as we depend on lavfi's
+        // audio frame buffering/creation to get the output audio frame size
+        // in samples correct. The audio frame size for the filter chain is
+        // configured in the output encoder initialization.
+        //
+        // Apparently avfilter_graph_request_oldest (called in
+        // transcode_from_filter) peeks. Peeking already puts one frame
+        // "ready to be given out", which means that any update in
+        // configuration afterwards will not help us.
+        //
+        // And yes, even av_buffersink_get_samples is affected,
+        // effectively breaking its promise of "frame will contain exactly
+        // nb_samples audio samples, except at the end of stream, when it
+        // can contain less than nb_samples."
+        if (av_buffersink_get_type(ost->filter->filter) == AVMEDIA_TYPE_AUDIO)
+            init_output_stream_wrapper(ost, 1);
+
         if ((ret = transcode_from_filter(ost->filter->graph, &ist)) < 0)
             return ret;
         if (!ist)
