@@ -647,6 +647,8 @@ static int scale_slice(AVFilterLink *link, AVFrame *out_buf, AVFrame *cur_pic, s
                          out,out_stride);
 }
 
+// swscale's internal range flag is 0 for RGB, which we have to override
+#define NORMALIZE_SWS_RANGE(format_flags, sws_range) (((format_flags) & AV_PIX_FMT_FLAG_RGB) ? 1 : (sws_range))
 static int scale_frame(AVFilterLink *link, AVFrame *in, AVFrame **frame_out)
 {
     AVFilterContext *ctx = link->dst;
@@ -750,11 +752,19 @@ scale:
         || in_range != AVCOL_RANGE_UNSPECIFIED
         || scale->out_range != AVCOL_RANGE_UNSPECIFIED) {
         int in_full, out_full, brightness, contrast, saturation;
+        int configured_in_full_range_flag, configured_out_full_range_flag;
         const int *inv_table, *table;
+        const AVPixFmtDescriptor *in_desc  = av_pix_fmt_desc_get(in->format);
+        const AVPixFmtDescriptor *out_desc = av_pix_fmt_desc_get(out->format);
+        av_assert0(in_desc && out_desc);
 
         sws_getColorspaceDetails(scale->sws, (int **)&inv_table, &in_full,
                                  (int **)&table, &out_full,
                                  &brightness, &contrast, &saturation);
+        // translate the internal range flags according to this
+        // filter's expectations for RGB.
+        in_full = NORMALIZE_SWS_RANGE(in_desc->flags, in_full);
+        out_full = NORMALIZE_SWS_RANGE(out_desc->flags, out_full);
 
         if (scale->in_color_matrix)
             inv_table = parse_yuv_type(scale->in_color_matrix, in->colorspace);
@@ -782,7 +792,39 @@ scale:
                                      table, out_full,
                                      brightness, contrast, saturation);
 
-        out->color_range = out_full ? AVCOL_RANGE_JPEG : AVCOL_RANGE_MPEG;
+        // double-check what was actually just configured,
+        // since swscale can silently ignore the color range
+        // value in sws_setColorspaceDetails.
+        sws_getColorspaceDetails(scale->sws, (int **)&inv_table,
+                                 &configured_in_full_range_flag,
+                                 (int **)&table,
+                                 &configured_out_full_range_flag,
+                                 &brightness, &contrast, &saturation);
+
+        // translate the actually configured internal range flags according
+        // to this filter's expectations for RGB.
+        configured_in_full_range_flag = \
+            NORMALIZE_SWS_RANGE(in_desc->flags,
+                                configured_in_full_range_flag);
+        configured_out_full_range_flag = \
+            NORMALIZE_SWS_RANGE(out_desc->flags,
+                                configured_out_full_range_flag);
+
+        if (in_full != configured_in_full_range_flag ||
+            out_full != configured_out_full_range_flag) {
+            av_log(ctx, AV_LOG_WARNING,
+                   "swscale overrode set input/output range value as it "
+                   "considered it an invalid configuration! "
+                   "(input: requested: %s, configured: %s), "
+                   "(output: requested: %s, configured: %s)!\n",
+                   in_full ? "full" : "limited",
+                   configured_in_full_range_flag ? "full" : "limited",
+                   out_full ? "full" : "limited",
+                   configured_out_full_range_flag ? "full" : "limited");
+        }
+
+        out->color_range = configured_out_full_range_flag ?
+                           AVCOL_RANGE_JPEG : AVCOL_RANGE_MPEG;
     }
 
     av_reduce(&out->sample_aspect_ratio.num, &out->sample_aspect_ratio.den,
