@@ -864,6 +864,74 @@ static void fill_xyztables(struct SwsContext *c)
     }
 }
 
+static int handle_jpeg(enum AVPixelFormat *format)
+{
+    switch (*format) {
+    case AV_PIX_FMT_YUVJ420P:
+        *format = AV_PIX_FMT_YUV420P;
+        return 1;
+    case AV_PIX_FMT_YUVJ411P:
+        *format = AV_PIX_FMT_YUV411P;
+        return 1;
+    case AV_PIX_FMT_YUVJ422P:
+        *format = AV_PIX_FMT_YUV422P;
+        return 1;
+    case AV_PIX_FMT_YUVJ444P:
+        *format = AV_PIX_FMT_YUV444P;
+        return 1;
+    case AV_PIX_FMT_YUVJ440P:
+        *format = AV_PIX_FMT_YUV440P;
+        return 1;
+    case AV_PIX_FMT_GRAY8:
+    case AV_PIX_FMT_YA8:
+    case AV_PIX_FMT_GRAY9LE:
+    case AV_PIX_FMT_GRAY9BE:
+    case AV_PIX_FMT_GRAY10LE:
+    case AV_PIX_FMT_GRAY10BE:
+    case AV_PIX_FMT_GRAY12LE:
+    case AV_PIX_FMT_GRAY12BE:
+    case AV_PIX_FMT_GRAY14LE:
+    case AV_PIX_FMT_GRAY14BE:
+    case AV_PIX_FMT_GRAY16LE:
+    case AV_PIX_FMT_GRAY16BE:
+    case AV_PIX_FMT_YA16BE:
+    case AV_PIX_FMT_YA16LE:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+static int range_override_needed(enum AVPixelFormat format)
+{
+    return !isYUV(format) && !isGray(format);
+}
+
+static int check_format_range(SwsContext *c, enum AVPixelFormat *format,
+                              int range, const char *descriptor)
+{
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(*format);
+    int default_range = handle_jpeg(format);
+    av_assert0(desc);
+
+    if (range_override_needed(*format) && !range) {
+        // first, handle the special case of limited range RGB
+        av_log(c, AV_LOG_WARNING,
+               "%s range set to limited for %s, unsupported! "
+               "Overriding to full range.\n",
+               descriptor ? descriptor : "Color", desc->name);
+
+        return 1;
+    }
+
+
+    if (range != -1)
+        // for YCbCr and gray, we return the value if set
+        return range;
+
+    return range_override_needed(*format) ? 1 : default_range;
+}
+
 int sws_setColorspaceDetails(struct SwsContext *c, const int inv_table[4],
                              int srcRange, const int table[4], int dstRange,
                              int brightness, int contrast, int saturation)
@@ -876,10 +944,25 @@ int sws_setColorspaceDetails(struct SwsContext *c, const int inv_table[4],
     desc_dst = av_pix_fmt_desc_get(c->dstFormat);
     desc_src = av_pix_fmt_desc_get(c->srcFormat);
 
-    if(!isYUV(c->dstFormat) && !isGray(c->dstFormat))
-        dstRange = 0;
-    if(!isYUV(c->srcFormat) && !isGray(c->srcFormat))
-        srcRange = 0;
+    if (dstRange == -1) {
+        dstRange = c->dstRange;
+    } else {
+        c->exported_dstRange = check_format_range(c, &c->dstFormat,
+                                                  dstRange,
+                                                  "Destination");
+        dstRange = range_override_needed(c->dstFormat) ?
+                   0 : c->exported_dstRange;
+    }
+
+    if (srcRange == -1) {
+        srcRange = c->srcRange;
+    } else {
+        c->exported_srcRange = check_format_range(c, &c->srcFormat,
+                                                  srcRange,
+                                                  "Source");
+        srcRange = range_override_needed(c->srcFormat) ?
+                   0 : c->exported_srcRange;
+    }
 
     if (c->srcRange != srcRange ||
         c->dstRange != dstRange ||
@@ -911,7 +994,7 @@ int sws_setColorspaceDetails(struct SwsContext *c, const int inv_table[4],
     c->srcFormatBpp = av_get_bits_per_pixel(desc_src);
 
     if (c->cascaded_context[c->cascaded_mainindex])
-        return sws_setColorspaceDetails(c->cascaded_context[c->cascaded_mainindex],inv_table, srcRange,table, dstRange, brightness,  contrast, saturation);
+        return sws_setColorspaceDetails(c->cascaded_context[c->cascaded_mainindex],inv_table, c->exported_srcRange,table, c->exported_dstRange, brightness,  contrast, saturation);
 
     if (!need_reinit)
         return 0;
@@ -968,7 +1051,8 @@ int sws_setColorspaceDetails(struct SwsContext *c, const int inv_table[4],
                 return ret;
             //we set both src and dst depending on that the RGB side will be ignored
             sws_setColorspaceDetails(c->cascaded_context[0], inv_table,
-                                     srcRange, table, dstRange,
+                                     c->exported_srcRange, table,
+                                     c->exported_dstRange,
                                      brightness, contrast, saturation);
 
             c->cascaded_context[1] = sws_getContext(tmp_width, tmp_height, tmp_format,
@@ -977,7 +1061,8 @@ int sws_setColorspaceDetails(struct SwsContext *c, const int inv_table[4],
             if (!c->cascaded_context[1])
                 return -1;
             sws_setColorspaceDetails(c->cascaded_context[1], inv_table,
-                                     srcRange, table, dstRange,
+                                     c->exported_srcRange, table,
+                                     c->exported_dstRange,
                                      0, 1 << 16, 1 << 16);
             return 0;
         }
@@ -1008,51 +1093,13 @@ int sws_getColorspaceDetails(struct SwsContext *c, int **inv_table,
 
     *inv_table  = c->srcColorspaceTable;
     *table      = c->dstColorspaceTable;
-    *srcRange   = c->srcRange;
-    *dstRange   = c->dstRange;
+    *srcRange   = c->exported_srcRange;
+    *dstRange   = c->exported_dstRange;
     *brightness = c->brightness;
     *contrast   = c->contrast;
     *saturation = c->saturation;
 
     return 0;
-}
-
-static int handle_jpeg(enum AVPixelFormat *format)
-{
-    switch (*format) {
-    case AV_PIX_FMT_YUVJ420P:
-        *format = AV_PIX_FMT_YUV420P;
-        return 1;
-    case AV_PIX_FMT_YUVJ411P:
-        *format = AV_PIX_FMT_YUV411P;
-        return 1;
-    case AV_PIX_FMT_YUVJ422P:
-        *format = AV_PIX_FMT_YUV422P;
-        return 1;
-    case AV_PIX_FMT_YUVJ444P:
-        *format = AV_PIX_FMT_YUV444P;
-        return 1;
-    case AV_PIX_FMT_YUVJ440P:
-        *format = AV_PIX_FMT_YUV440P;
-        return 1;
-    case AV_PIX_FMT_GRAY8:
-    case AV_PIX_FMT_YA8:
-    case AV_PIX_FMT_GRAY9LE:
-    case AV_PIX_FMT_GRAY9BE:
-    case AV_PIX_FMT_GRAY10LE:
-    case AV_PIX_FMT_GRAY10BE:
-    case AV_PIX_FMT_GRAY12LE:
-    case AV_PIX_FMT_GRAY12BE:
-    case AV_PIX_FMT_GRAY14LE:
-    case AV_PIX_FMT_GRAY14BE:
-    case AV_PIX_FMT_GRAY16LE:
-    case AV_PIX_FMT_GRAY16BE:
-    case AV_PIX_FMT_YA16BE:
-    case AV_PIX_FMT_YA16LE:
-        return 1;
-    default:
-        return 0;
-    }
 }
 
 static int handle_0alpha(enum AVPixelFormat *format)
@@ -1200,16 +1247,27 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
 
     unscaled = (srcW == dstW && srcH == dstH);
 
-    c->srcRange |= handle_jpeg(&c->srcFormat);
-    c->dstRange |= handle_jpeg(&c->dstFormat);
+    c->exported_srcRange = check_format_range(c, &c->srcFormat,
+                                              c->exported_srcRange,
+                                              "Source");
+    c->exported_dstRange = check_format_range(c, &c->dstFormat,
+                                              c->exported_dstRange,
+                                              "Destination");
+
+    // convert exported range to internal
+    c->srcRange = range_override_needed(srcFormat) ?
+                  0 : c->exported_srcRange;
+    c->dstRange = range_override_needed(dstFormat) ?
+                  0 : c->exported_dstRange;
 
     if(srcFormat!=c->srcFormat || dstFormat!=c->dstFormat)
         av_log(c, AV_LOG_WARNING, "deprecated pixel format used, make sure you did set range correctly\n");
 
     if (!c->contrast && !c->saturation && !c->dstFormatBpp)
-        sws_setColorspaceDetails(c, ff_yuv2rgb_coeffs[SWS_CS_DEFAULT], c->srcRange,
+        sws_setColorspaceDetails(c, ff_yuv2rgb_coeffs[SWS_CS_DEFAULT],
+                                 c->exported_srcRange,
                                  ff_yuv2rgb_coeffs[SWS_CS_DEFAULT],
-                                 c->dstRange, 0, 1 << 16, 1 << 16);
+                                 c->exported_dstRange, 0, 1 << 16, 1 << 16);
 
     handle_formats(c);
     srcFormat = c->srcFormat;

@@ -625,6 +625,9 @@ typedef struct SwsContext {
     SwsDither dither;
 
     SwsAlphaBlend alphablend;
+
+    int exported_srcRange;
+    int exported_dstRange;
 } SwsContext;
 //FIXME check init (where 0)
 

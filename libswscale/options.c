@@ -59,8 +59,8 @@ static const AVOption swscale_options[] = {
     { "dsth",            "destination height",            OFFSET(dstH),      AV_OPT_TYPE_INT,    { .i64 = 16                 }, 1,       INT_MAX,        VE },
     { "src_format",      "source format",                 OFFSET(srcFormat), AV_OPT_TYPE_PIXEL_FMT,{ .i64 = DEFAULT          }, 0,       INT_MAX, VE },
     { "dst_format",      "destination format",            OFFSET(dstFormat), AV_OPT_TYPE_PIXEL_FMT,{ .i64 = DEFAULT          }, 0,       INT_MAX, VE },
-    { "src_range",       "source is full range",          OFFSET(srcRange),  AV_OPT_TYPE_BOOL,   { .i64 = DEFAULT            }, 0,       1,              VE },
-    { "dst_range",       "destination is full range",     OFFSET(dstRange),  AV_OPT_TYPE_BOOL,   { .i64 = DEFAULT            }, 0,       1,              VE },
+    { "src_range",       "source is full range",          OFFSET(exported_srcRange),  AV_OPT_TYPE_BOOL,   { .i64 = -1            }, -1,       1,              VE },
+    { "dst_range",       "destination is full range",     OFFSET(exported_dstRange),  AV_OPT_TYPE_BOOL,   { .i64 = -1            }, -1,       1,              VE },
     { "param0",          "scaler param 0",                OFFSET(param[0]),  AV_OPT_TYPE_DOUBLE, { .dbl = SWS_PARAM_DEFAULT  }, INT_MIN, INT_MAX,        VE },
     { "param1",          "scaler param 1",                OFFSET(param[1]),  AV_OPT_TYPE_DOUBLE, { .dbl = SWS_PARAM_DEFAULT  }, INT_MIN, INT_MAX,        VE },
 
