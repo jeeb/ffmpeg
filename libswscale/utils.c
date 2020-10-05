@@ -1247,6 +1247,9 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
 
     unscaled = (srcW == dstW && srcH == dstH);
 
+    av_log(c, AV_LOG_VERBOSE, "Initial configured range values: src: %d, dst: %d\n",
+           c->exported_srcRange, c->exported_dstRange);
+
     c->exported_srcRange = check_format_range(c, &c->srcFormat,
                                               c->exported_srcRange,
                                               "Source");
@@ -1261,7 +1264,17 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
                   0 : c->exported_dstRange;
 
     if(srcFormat!=c->srcFormat || dstFormat!=c->dstFormat)
-        av_log(c, AV_LOG_WARNING, "deprecated pixel format used, make sure you did set range correctly\n");
+        av_log(c, AV_LOG_WARNING, "deprecated pixel format used for %s, make "
+                                  "sure you did set range correctly\n",
+                                  (srcFormat!=c->srcFormat && dstFormat!=c->dstFormat) ?
+                                  "both source and destination" :
+                                  (srcFormat!=c->srcFormat) ? "source" :
+                                  "destination");
+
+    av_log(c, AV_LOG_VERBOSE, "color ranges: src: %d src exported: %d, "
+                              "dst: %d, dst exported: %d\n",
+           c->srcRange, c->exported_srcRange,
+           c->dstRange, c->exported_dstRange);
 
     if (!c->contrast && !c->saturation && !c->dstFormatBpp)
         sws_setColorspaceDetails(c, ff_yuv2rgb_coeffs[SWS_CS_DEFAULT],
