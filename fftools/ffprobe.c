@@ -35,6 +35,7 @@
 #include "libavutil/bprint.h"
 #include "libavutil/display.h"
 #include "libavutil/hash.h"
+#include "libavutil/hdr_dynamic_metadata.h"
 #include "libavutil/mastering_display_metadata.h"
 #include "libavutil/dovi_meta.h"
 #include "libavutil/opt.h"
@@ -1925,6 +1926,13 @@ static void print_pkt_side_data(WriterContext *w,
                 print_q("min_luminance", metadata->min_luminance, '/');
                 print_q("max_luminance", metadata->max_luminance, '/');
             }
+        } else if (sd->type == AV_PKT_DATA_DYNAMIC_HDR_PLUS) {
+            AVDynamicHDRPlus *metadata = (AVDynamicHDRPlus *)sd->data;
+            // Partially print HDR10+ metadata.
+            print_int("num_windows", metadata->num_windows);
+            print_q("targeted_system_display_maximum_luminance", metadata->targeted_system_display_maximum_luminance, '/');
+            print_int("targeted_system_display_actual_peak_luminance_flag", metadata->targeted_system_display_actual_peak_luminance_flag);
+            print_int("mastering_display_actual_peak_luminance_flag", metadata->mastering_display_actual_peak_luminance_flag);
         } else if (sd->type == AV_PKT_DATA_CONTENT_LIGHT_LEVEL) {
             AVContentLightMetadata *metadata = (AVContentLightMetadata *)sd->data;
             print_int("max_content", metadata->MaxCLL);
@@ -2250,6 +2258,14 @@ static void show_frame(WriterContext *w, AVFrame *frame, AVStream *stream,
                     print_q("min_luminance", metadata->min_luminance, '/');
                     print_q("max_luminance", metadata->max_luminance, '/');
                 }
+            } else if (sd->type == AV_FRAME_DATA_DYNAMIC_HDR_PLUS) {
+                AVDynamicHDRPlus *metadata = (AVDynamicHDRPlus *)sd->data;
+                // Partially print HDR10+ metadata.
+		print_int("num_windows", metadata->num_windows);
+		print_q("targeted_system_display_maximum_luminance", metadata->targeted_system_display_maximum_luminance, '/');
+		print_int("targeted_system_display_actual_peak_luminance_flag", metadata->targeted_system_display_actual_peak_luminance_flag);
+		print_int("mastering_display_actual_peak_luminance_flag", metadata->mastering_display_actual_peak_luminance_flag);
+
             } else if (sd->type == AV_FRAME_DATA_CONTENT_LIGHT_LEVEL) {
                 AVContentLightMetadata *metadata = (AVContentLightMetadata *)sd->data;
                 print_int("max_content", metadata->MaxCLL);

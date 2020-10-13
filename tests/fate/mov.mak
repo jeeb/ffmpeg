@@ -29,6 +29,7 @@ FATE_MOV_FFPROBE = fate-mov-neg-firstpts-discard \
                    fate-mov-guess-delay-2 \
                    fate-mov-guess-delay-3 \
                    fate-mov-mp4-with-mov-in24-ver \
+                   fate-mov-hdr10-plus-metadata \
 
 FATE_MOV_FASTSTART = fate-mov-faststart-4gb-overflow \
 
@@ -124,3 +125,5 @@ fate-mov-faststart-4gb-overflow: CMP = oneline
 fate-mov-faststart-4gb-overflow: REF = bc875921f151871e787c4b4023269b29
 
 fate-mov-mp4-with-mov-in24-ver: CMD = run ffprobe$(PROGSSUF)$(EXESUF) -show_entries stream=codec_name -select_streams 1 $(TARGET_SAMPLES)/mov/mp4-with-mov-in24-ver.mp4
+
+fate-mov-hdr10-plus-metadata: CMD = run ffprobe$(PROGSSUF)$(EXESUF) -show_frames -read_intervals 0%+0.01 -select_streams v -v 0 $(TARGET_SAMPLES)/mov/hdr10_plus_h265_sample.mp4

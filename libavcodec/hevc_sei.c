@@ -26,6 +26,7 @@
 #include "golomb.h"
 #include "hevc_ps.h"
 #include "hevc_sei.h"
+#include "internal.h"
 
 static int decode_nal_sei_decoded_picture_hash(HEVCSEIPictureHash *s, GetBitContext *gb)
 {
@@ -209,8 +210,8 @@ static int decode_nal_sei_user_data_unregistered(HEVCSEIUnregistered *s, GetBitC
 static int decode_nal_sei_user_data_registered_itu_t_t35(HEVCSEI *s, GetBitContext *gb,
                                                          int size)
 {
-    uint32_t country_code;
-    uint32_t user_identifier;
+    uint8_t country_code;
+    uint16_t provider_code;
 
     if (size < 7)
         return AVERROR(EINVAL);
@@ -222,18 +223,31 @@ static int decode_nal_sei_user_data_registered_itu_t_t35(HEVCSEI *s, GetBitConte
         size--;
     }
 
-    skip_bits(gb, 8);
-    skip_bits(gb, 8);
+    provider_code = get_bits(gb, 16);
 
-    user_identifier = get_bits_long(gb, 32);
-
-    switch (user_identifier) {
-        case MKBETAG('G', 'A', '9', '4'):
+    const uint8_t usa_country_code = 0xB5;
+    const uint16_t smpte_provider_code = 0x003C;
+    if (country_code == usa_country_code &&
+        provider_code == smpte_provider_code) {
+        // A/341 Amendment – 2094-40
+        uint16_t provider_oriented_code = get_bits(gb, 16);
+        uint8_t application_identifier = get_bits(gb, 8);
+        const uint16_t smpte2094_40_provider_oriented_code = 0x0001;
+        const uint16_t smpte2094_40_application_identifier = 0x04;
+        if (provider_oriented_code == smpte2094_40_provider_oriented_code &&
+            application_identifier == smpte2094_40_application_identifier) {
+            int err = ff_read_itu_t_t35_to_dynamic_hdr_plus(gb, &s->dynamic_hdr_plus.info);
+            if (err < 0 && s->dynamic_hdr_plus.info) {
+                av_buffer_unref(&s->dynamic_hdr_plus.info);
+            }
+            return err;
+        }
+    } else {
+        uint32_t  user_identifier = get_bits_long(gb, 32);
+        if(user_identifier == MKBETAG('G', 'A', '9', '4'))
             return decode_registered_user_data_closed_caption(&s->a53_caption, gb, size);
-        default:
-            skip_bits_long(gb, size * 8);
-            break;
     }
+    skip_bits_long(gb, size * 8);
     return 0;
 }
 
@@ -420,4 +434,5 @@ void ff_hevc_reset_sei(HEVCSEI *s)
         av_buffer_unref(&s->unregistered.buf_ref[i]);
     s->unregistered.nb_buf_ref = 0;
     av_freep(&s->unregistered.buf_ref);
+    av_buffer_unref(&s->dynamic_hdr_plus.info);
 }

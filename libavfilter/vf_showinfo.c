@@ -37,6 +37,7 @@
 #include "libavutil/timecode.h"
 #include "libavutil/mastering_display_metadata.h"
 #include "libavutil/video_enc_params.h"
+#include "libavutil/hdr_dynamic_metadata.h"
 
 #include "avfilter.h"
 #include "internal.h"
@@ -176,6 +177,30 @@ static void dump_mastering_display(AVFilterContext *ctx, const AVFrameSideData *
            av_q2d(mastering_display->display_primaries[2][1]),
            av_q2d(mastering_display->white_point[0]), av_q2d(mastering_display->white_point[1]),
            av_q2d(mastering_display->min_luminance), av_q2d(mastering_display->max_luminance));
+}
+
+static void dump_dynamic_hdr_plus(AVFilterContext *ctx, AVFrameSideData *sd)
+{
+    AVDynamicHDRPlus *hdr_plus;
+
+    av_log(ctx, AV_LOG_INFO, "HDR10+ metadata: ");
+    if (sd->size < sizeof(*hdr_plus)) {
+        av_log(ctx, AV_LOG_ERROR, "invalid data\n");
+        return;
+    }
+
+    hdr_plus = (AVDynamicHDRPlus *)sd->data;
+    av_log(ctx, AV_LOG_INFO, "num_windows: %d, ",
+           hdr_plus->num_windows);
+    av_log(ctx, AV_LOG_INFO,
+           "targeted_system_display_maximum_luminance: %8.4f, ",
+           av_q2d(hdr_plus->targeted_system_display_maximum_luminance));
+    av_log(ctx, AV_LOG_INFO,
+           "targeted_system_display_actual_peak_luminance_flag: %d, ",
+           hdr_plus->targeted_system_display_actual_peak_luminance_flag);
+    av_log(ctx, AV_LOG_INFO,
+           "mastering_display_actual_peak_luminance_flag: %d",
+           hdr_plus->mastering_display_actual_peak_luminance_flag);
 }
 
 static void dump_content_light_metadata(AVFilterContext *ctx, const AVFrameSideData *sd)
@@ -395,6 +420,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
             break;
         case AV_FRAME_DATA_MASTERING_DISPLAY_METADATA:
             dump_mastering_display(ctx, sd);
+            break;
+        case AV_FRAME_DATA_DYNAMIC_HDR_PLUS:
+            dump_dynamic_hdr_plus(ctx, sd);
             break;
         case AV_FRAME_DATA_CONTENT_LIGHT_LEVEL:
             dump_content_light_metadata(ctx, sd);

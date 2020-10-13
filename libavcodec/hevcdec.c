@@ -2866,6 +2866,16 @@ static int set_side_data(HEVCContext *s)
 
         s->sei.timecode.num_clock_ts = 0;
     }
+    if (s->sei.dynamic_hdr_plus.info){
+      AVBufferRef *info_ref = av_buffer_ref(s->sei.dynamic_hdr_plus.info);
+      if (!info_ref)
+	return AVERROR(ENOMEM);
+
+      if(!av_frame_new_side_data_from_buf(out, AV_FRAME_DATA_DYNAMIC_HDR_PLUS, info_ref)){
+        av_buffer_unref(&info_ref);
+        return AVERROR(ENOMEM);
+      }
+    }
 
     return 0;
 }
@@ -3558,6 +3568,12 @@ static int hevc_update_thread_context(AVCodecContext *dst,
                 return AVERROR(ENOMEM);
             s->sei.unregistered.nb_buf_ref++;
         }
+    }
+    av_buffer_unref(&s->sei.dynamic_hdr_plus.info);
+    if (s0->sei.dynamic_hdr_plus.info) {
+        s->sei.dynamic_hdr_plus.info = av_buffer_ref(s0->sei.dynamic_hdr_plus.info);
+        if (!s->sei.dynamic_hdr_plus.info)
+            return AVERROR(ENOMEM);
     }
 
     s->sei.frame_packing        = s0->sei.frame_packing;

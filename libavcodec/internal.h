@@ -391,6 +391,15 @@ int ff_int_from_list_or_default(void *ctx, const char * val_name, int val,
 
 void ff_dvdsub_parse_palette(uint32_t *palette, const char *p);
 
+/**
+ * Reads and decode the user data registered ITU-T T.35 to AVbuffer (AVDynamicHDRPlus).
+ * @param gbc The bit content to be decoded.
+ * @param output A buffer containing the decoded AVDynamicHDRPlus structure.
+ *
+ * @return 0 if succeed. Otherwise, returns the appropriate AVERROR.
+ */
+int ff_read_itu_t_t35_to_dynamic_hdr_plus(void *gbc, AVBufferRef **output);
+
 #if defined(_WIN32) && CONFIG_SHARED && !defined(BUILDING_avcodec)
 #    define av_export_avcodec __declspec(dllimport)
 #else
