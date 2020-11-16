@@ -104,6 +104,7 @@ int main(int argc, char **argv)
             if      (!strcmp(optarg, "auto"))      escape_mode = AV_ESCAPE_MODE_AUTO;
             else if (!strcmp(optarg, "backslash")) escape_mode = AV_ESCAPE_MODE_BACKSLASH;
             else if (!strcmp(optarg, "quote"))     escape_mode = AV_ESCAPE_MODE_QUOTE;
+            else if (!strcmp(optarg, "xml"))       escape_mode = AV_ESCAPE_MODE_XML;
             else {
                 av_log(NULL, AV_LOG_ERROR,
                        "Invalid value '%s' for option -m, "
