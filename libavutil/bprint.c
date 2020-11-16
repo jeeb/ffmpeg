@@ -283,6 +283,21 @@ void av_bprint_escape(AVBPrint *dstbuf, const char *src, const char *special_cha
         av_bprint_chars(dstbuf, '\'', 1);
         break;
 
+    case AV_ESCAPE_MODE_XML_CHAR_DATA:
+        /* escape XML non-markup character data as per 2.4 */
+        /*  [^<&]* - ([^<&]* ']]>' [^<&]*) */
+        for (; *src; src++) {
+            switch (*src) {
+            case '&' : av_bprintf(dstbuf, "%s", "&amp;");  break;
+            case '<' : av_bprintf(dstbuf, "%s", "&lt;");   break;
+            case '>' : av_bprintf(dstbuf, "%s", "&gt;");   break;
+            case '"' : av_bprintf(dstbuf, "%s", "&quot;"); break;
+            case '\'': av_bprintf(dstbuf, "%s", "&apos;"); break;
+            default: av_bprint_chars(dstbuf, *src, 1);
+            }
+        }
+        break;
+
     /* case AV_ESCAPE_MODE_BACKSLASH or unknown mode */
     default:
         /* \-escape characters */

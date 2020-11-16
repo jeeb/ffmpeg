@@ -321,9 +321,10 @@ int av_match_name(const char *name, const char *names);
 char *av_append_path_component(const char *path, const char *component);
 
 enum AVEscapeMode {
-    AV_ESCAPE_MODE_AUTO,      ///< Use auto-selected escaping mode.
-    AV_ESCAPE_MODE_BACKSLASH, ///< Use backslash escaping.
-    AV_ESCAPE_MODE_QUOTE,     ///< Use single-quote escaping.
+    AV_ESCAPE_MODE_AUTO,          ///< Use auto-selected escaping mode.
+    AV_ESCAPE_MODE_BACKSLASH,     ///< Use backslash escaping.
+    AV_ESCAPE_MODE_QUOTE,         ///< Use single-quote escaping.
+    AV_ESCAPE_MODE_XML_CHAR_DATA, ///< Use XML non-markup character data escaping.
 };
 
 /**
