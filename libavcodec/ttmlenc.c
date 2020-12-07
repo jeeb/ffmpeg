@@ -87,7 +87,7 @@ static int ttml_encode_frame(AVCodecContext *avctx, uint8_t *buf,
 
         if (sub->rects[i]->type != SUBTITLE_ASS) {
             av_log(avctx, AV_LOG_ERROR, "Only SUBTITLE_ASS type supported.\n");
-            return AVERROR(ENOSYS);
+            return AVERROR(EINVAL);
         }
 
 #if FF_API_ASS_TIMING
@@ -117,8 +117,8 @@ static int ttml_encode_frame(AVCodecContext *avctx, uint8_t *buf,
         return 0;
 
     if (s->buffer.len > bufsize) {
-        av_log(avctx, AV_LOG_ERROR, "Buffer too small for ASS event.\n");
-        return -1;
+        av_log(avctx, AV_LOG_ERROR, "Buffer too small for TTML event.\n");
+        return AVERROR_BUFFER_TOO_SMALL;
     }
     memcpy(buf, s->buffer.str, s->buffer.len);
 
@@ -128,18 +128,41 @@ static int ttml_encode_frame(AVCodecContext *avctx, uint8_t *buf,
 static av_cold int ttml_encode_close(AVCodecContext *avctx)
 {
     TTMLContext *s = avctx->priv_data;
+
     ff_ass_split_free(s->ass_ctx);
+
     av_bprint_finalize(&s->buffer, NULL);
+
     return 0;
 }
 
 static av_cold int ttml_encode_init(AVCodecContext *avctx)
 {
+    int ret = AVERROR_BUG;
     TTMLContext *s = avctx->priv_data;
-    s->avctx = avctx;
-    s->ass_ctx = ff_ass_split(avctx->subtitle_header);
+
+    s->avctx   = avctx;
+
+    if (!(s->ass_ctx = ff_ass_split(avctx->subtitle_header))) {
+        ret = AVERROR_INVALIDDATA;
+        goto failure;
+    }
+
+    if (!(avctx->extradata = av_malloc(4 + AV_INPUT_BUFFER_PADDING_SIZE))) {
+        ret = AVERROR(ENOMEM);
+        goto failure;
+    }
+    avctx->extradata_size = 4;
+
     av_bprint_init(&s->buffer, 0, AV_BPRINT_SIZE_UNLIMITED);
-    return s->ass_ctx ? 0 : AVERROR_INVALIDDATA;
+
+    return 0;
+
+failure:
+    ff_ass_split_free(s->ass_ctx);
+    av_bprint_finalize(&s->buffer, NULL);
+
+    return ret;
 }
 
 AVCodec ff_ttml_encoder = {

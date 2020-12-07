@@ -30,6 +30,15 @@
 #include "avformat.h"
 #include "internal.h"
 
+enum TTMLPacketType {
+    PACKET_TYPE_PARAGRAPH,
+    PACKET_TYPE_DOCUMENT,
+};
+
+typedef struct TTMLMuxContext {
+    enum TTMLPacketType input_type;
+} TTMLMuxContext;
+
 static const char ttml_header_text[] =
 "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
 "<tt\n"
@@ -62,6 +71,8 @@ static void ttml_write_time(AVIOContext *pb, const char tag[],
 
 static int ttml_write_header(AVFormatContext *ctx)
 {
+    TTMLMuxContext *ttml_ctx = ctx->priv_data;
+
     if (ctx->nb_streams != 1 ||
         ctx->streams[0]->codecpar->codec_id != AV_CODEC_ID_TTML) {
         av_log(ctx, AV_LOG_ERROR, "Exactly one TTML stream is required!\n");
@@ -75,11 +86,16 @@ static int ttml_write_header(AVFormatContext *ctx)
         AVDictionaryEntry *lang = av_dict_get(s->metadata, "language", NULL, 0);
         const char *printed_lang = (lang && lang->value) ? lang->value : "";
 
+        // Not perfect, but decide whether the packet is a document or not
+        // by the existence of extradata.
+        ttml_ctx->input_type = s->codecpar->extradata ?
+                               PACKET_TYPE_PARAGRAPH :
+                               PACKET_TYPE_DOCUMENT;
+
         avpriv_set_pts_info(s, 64, 1, 1000);
 
-        avio_printf(pb, ttml_header_text, printed_lang);
-
-        avio_flush(pb);
+        if (ttml_ctx->input_type == PACKET_TYPE_PARAGRAPH)
+            avio_printf(pb, ttml_header_text, printed_lang);
     }
 
     return 0;
@@ -87,25 +103,39 @@ static int ttml_write_header(AVFormatContext *ctx)
 
 static int ttml_write_packet(AVFormatContext *ctx, AVPacket *pkt)
 {
-    AVIOContext  *pb = ctx->pb;
+    TTMLMuxContext *ttml_ctx = ctx->priv_data;
+    AVIOContext    *pb       = ctx->pb;
 
-    avio_printf(pb,     "      <p\n");
-    ttml_write_time(pb, "        begin", pkt->pts);
-    avio_printf(pb, "\n");
-    ttml_write_time(pb, "        end",   pkt->pts + pkt->duration);
-    avio_printf(pb, ">");
-    avio_write(pb, pkt->data, pkt->size);
-    avio_printf(pb, "</p>\n");
+    switch (ttml_ctx->input_type) {
+    case PACKET_TYPE_PARAGRAPH:
+        // write out a paragraph element with the given contents.
+        avio_printf(pb,     "      <p\n");
+        ttml_write_time(pb, "        begin", pkt->pts);
+        avio_printf(pb, "\n");
+        ttml_write_time(pb, "        end",   pkt->pts + pkt->duration);
+        avio_printf(pb, ">");
+        avio_write(pb, pkt->data, pkt->size);
+        avio_printf(pb, "</p>\n");
+        break;
+    case PACKET_TYPE_DOCUMENT:
+        // dump the given document out as-is.
+        avio_write(pb, pkt->data, pkt->size);
+        break;
+    default:
+        av_log(ctx, AV_LOG_ERROR, "Invalid TTML input packet type!\n");
+        return AVERROR(EINVAL);
+    }
 
     return 0;
 }
 
 static int ttml_write_trailer(AVFormatContext *ctx)
 {
-    AVIOContext  *pb = ctx->pb;
+    TTMLMuxContext *ttml_ctx = ctx->priv_data;
+    AVIOContext    *pb       = ctx->pb;
 
-    avio_printf(pb, ttml_footer_text);
-    avio_flush(pb);
+    if (ttml_ctx->input_type == PACKET_TYPE_PARAGRAPH)
+        avio_printf(pb, ttml_footer_text);
 
     return 0;
 }
@@ -115,7 +145,9 @@ AVOutputFormat ff_ttml_muxer = {
     .long_name         = NULL_IF_CONFIG_SMALL("TTML subtitle"),
     .extensions        = "ttml",
     .mime_type         = "text/ttml",
-    .flags             = AVFMT_GLOBALHEADER | AVFMT_VARIABLE_FPS | AVFMT_TS_NONSTRICT,
+    .priv_data_size    = sizeof(TTMLMuxContext),
+    .flags             = AVFMT_GLOBALHEADER | AVFMT_VARIABLE_FPS |
+                         AVFMT_TS_NONSTRICT,
     .subtitle_codec    = AV_CODEC_ID_TTML,
     .write_header      = ttml_write_header,
     .write_packet      = ttml_write_packet,
