@@ -117,6 +117,7 @@ typedef enum FifoMessageType {
 typedef struct FifoMessage {
     FifoMessageType type;
     AVPacket pkt;
+    unsigned int packet_ts_adjusted;
 } FifoMessage;
 
 static int fifo_thread_write_header(FifoThreadContext *ctx)
@@ -176,13 +177,13 @@ static int64_t next_duration(AVFormatContext *avf, AVPacket *pkt, int64_t *last_
     return duration;
 }
 
-static int fifo_thread_write_packet(FifoThreadContext *ctx, AVPacket *pkt)
+static int fifo_thread_write_packet(FifoThreadContext *ctx, AVPacket *pkt,
+                                    unsigned int *packet_ts_adjusted)
 {
     AVFormatContext *avf = ctx->avf;
     FifoContext *fifo = avf->priv_data;
     AVFormatContext *avf2 = fifo->avf;
-    AVRational src_tb, dst_tb;
-    int ret, s_idx;
+    int ret;
 
     if (fifo->timeshift && pkt->dts != AV_NOPTS_VALUE)
         atomic_fetch_sub_explicit(&fifo->queue_duration, next_duration(avf, pkt, &ctx->last_received_dts), memory_order_relaxed);
@@ -198,10 +199,14 @@ static int fifo_thread_write_packet(FifoThreadContext *ctx, AVPacket *pkt)
         }
     }
 
-    s_idx = pkt->stream_index;
-    src_tb = avf->streams[s_idx]->time_base;
-    dst_tb = avf2->streams[s_idx]->time_base;
-    av_packet_rescale_ts(pkt, src_tb, dst_tb);
+    if (!*packet_ts_adjusted) {
+        int s_idx = pkt->stream_index;
+        AVRational src_tb = avf->streams[s_idx]->time_base;
+        AVRational dst_tb = avf2->streams[s_idx]->time_base;
+
+        av_packet_rescale_ts(pkt, src_tb, dst_tb);
+        *packet_ts_adjusted = 1;
+    }
 
     ret = av_write_frame(avf2, pkt);
     if (ret >= 0)
@@ -243,7 +248,8 @@ static int fifo_thread_dispatch_message(FifoThreadContext *ctx, FifoMessage *msg
         av_assert0(ret >= 0);
         return ret;
     case FIFO_WRITE_PACKET:
-        return fifo_thread_write_packet(ctx, &msg->pkt);
+        return fifo_thread_write_packet(ctx, &msg->pkt,
+                                        &msg->packet_ts_adjusted);
     case FIFO_FLUSH_OUTPUT:
         return fifo_thread_flush_output(ctx);
     }
