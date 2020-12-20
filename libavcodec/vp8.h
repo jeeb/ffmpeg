@@ -339,6 +339,13 @@ typedef struct VP8Context {
     uint8_t feature_present_prob[4];
     uint8_t feature_index_prob[4][3];
     uint8_t feature_value[4][4];
+
+    /**
+     * Alpha side data present in input (VP8)
+     */
+    unsigned int alpha_present;
+
+    AVCodecContext *alpha_ctx;
 } VP8Context;
 
 int ff_vp8_decode_init(AVCodecContext *avctx);

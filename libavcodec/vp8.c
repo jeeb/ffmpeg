@@ -205,6 +205,10 @@ int update_dimensions(VP8Context *s, int width, int height, int is_vp7)
         s->pix_fmt = get_pixel_format(s);
         if (s->pix_fmt < 0)
             return AVERROR(EINVAL);
+
+        if (s->alpha_present && s->pix_fmt == AV_PIX_FMT_YUV420P)
+            s->pix_fmt = AV_PIX_FMT_YUVA420P;
+
         avctx->pix_fmt = s->pix_fmt;
     }
 
@@ -2644,6 +2648,10 @@ int vp78_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
             ret = AVERROR(EINVAL);
             goto err;
         }
+
+        if (s->alpha_present && s->pix_fmt == AV_PIX_FMT_YUV420P)
+            s->pix_fmt = AV_PIX_FMT_YUVA420P;
+
         avctx->pix_fmt = s->pix_fmt;
     }
 
@@ -2806,10 +2814,157 @@ err:
     return ret;
 }
 
+static int extract_alpha_packet(AVCodecContext *avctx, AVPacket *avpkt,
+                                AVPacket **out_pkt)
+{
+    VP8Context *s = avctx->priv_data;
+    int side_data_size = 0;
+    uint8_t *side_data =
+        av_packet_get_side_data(avpkt,
+                                AV_PKT_DATA_MATROSKA_BLOCKADDITIONAL,
+                                &side_data_size);
+    if (side_data_size < 8)
+        return 0;
+
+    {
+        const uint64_t additional_id = AV_RB64(side_data);
+        AVPacket *alpha_packet = NULL;
+        int ret = AVERROR_BUG2;
+
+        side_data += 8;
+        side_data_size -= 8;
+        if (additional_id != 1)
+            return 0;
+
+        s->alpha_present = 1;
+        av_log(avctx, AV_LOG_VERBOSE,
+               "Alpha channel is present! avctx pix_fmt: %s, "
+               "vp8context pix_fmt: %s\n",
+               av_get_pix_fmt_name(avctx->pix_fmt),
+               av_get_pix_fmt_name(s->pix_fmt));
+
+        if (s->pix_fmt == AV_PIX_FMT_YUV420P)
+            avctx->pix_fmt = s->pix_fmt = AV_PIX_FMT_YUVA420P;
+
+        if (!(alpha_packet = av_packet_alloc())) {
+            av_log(avctx, AV_LOG_ERROR,
+                   "Failed to allocate alpha AVPacket!\n");
+            ret = AVERROR(ENOMEM);
+            goto failed;
+        }
+
+        if ((ret = av_new_packet(alpha_packet, side_data_size)) < 0) {
+            av_log(avctx, AV_LOG_ERROR,
+                   "Failed to allocate alpha AVPacket's buffer!\n");
+            ret = AVERROR(ENOMEM);
+            goto failed;
+        }
+
+        memcpy(alpha_packet->buf->data, side_data, side_data_size);
+        alpha_packet->pts      = avpkt->pts;
+        alpha_packet->dts      = avpkt->dts;
+        alpha_packet->duration = avpkt->duration;
+
+        *out_pkt = alpha_packet;
+
+        return 0;
+
+failed:
+        av_packet_free(&alpha_packet);
+        return ret;
+    }
+}
+
 int ff_vp8_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
                         AVPacket *avpkt)
 {
-    return vp78_decode_frame(avctx, data, got_frame, avpkt, IS_VP8);
+    AVPacket *alpha_pkt = NULL;
+    AVFrame  *alpha_frame = NULL;
+    VP8Context *s = avctx->priv_data;
+    int ret = AVERROR_BUG;
+
+    if ((ret = extract_alpha_packet(avctx, avpkt, &alpha_pkt)) < 0) {
+        av_log(avctx, AV_LOG_ERROR, "Failed to extract alpha AVPacket!\n");
+        return ret;
+    }
+
+    if ((ret = vp78_decode_frame(avctx, data, got_frame, avpkt, IS_VP8)) < 0)
+        goto err;
+
+    if (alpha_pkt && !s->alpha_ctx) {
+        if (!(s->alpha_ctx = avcodec_alloc_context3(avctx->codec))) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to allocate alpha decoder!\n");
+            ret = AVERROR(ENOMEM);
+            goto err;
+        }
+
+        s->alpha_ctx->pix_fmt = avctx->pix_fmt;
+        s->alpha_ctx->width = avctx->width;
+        s->alpha_ctx->height = avctx->height;
+
+        if ((ret = avcodec_open2(s->alpha_ctx, avctx->codec, NULL)) < 0) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to initialize alpha decoder!\n");
+            goto err;
+        }
+    }
+
+    if (got_frame && alpha_pkt) {
+        if (!(alpha_frame = av_frame_alloc())) {
+            ret = AVERROR(ENOMEM);
+            av_log(avctx, AV_LOG_ERROR,
+                   "Failed to allocate alpha AVFrame!\n");
+            goto err;
+        }
+
+        if ((ret = avcodec_send_packet(s->alpha_ctx, alpha_pkt)) < 0) {
+            av_log(avctx, AV_LOG_ERROR,
+                   "Failed to push alpha AVPacket into decoder!\n");
+            goto err;
+        }
+
+        if ((ret = avcodec_receive_frame(s->alpha_ctx, alpha_frame)) < 0) {
+            switch (ret) {
+            case AVERROR(EAGAIN):
+                ret = EAGAIN;
+                break;
+            case AVERROR_INPUT_CHANGED:
+                ret = 0;
+                break;
+            case AVERROR_EOF:
+                break;
+            default:
+                av_log(avctx, AV_LOG_ERROR,
+                       "Failed to receive decoded alpha frame!\n");
+                goto err;
+            }
+        }
+
+        if (ret == 0) {
+            AVFrame *decoded_frame = (AVFrame *)data;
+            int copy_height = FFMIN(alpha_frame->height, decoded_frame->height);
+
+            av_log(avctx, AV_LOG_VERBOSE,
+                   "Received alpha AVFrame: width: %d, height: %d, pix_fmt: %s (actual decoding AVFrame pix_fmt: %s)\n",
+                   alpha_frame->width, alpha_frame->height,
+                   av_get_pix_fmt_name(alpha_frame->format),
+                   av_get_pix_fmt_name(decoded_frame->format));
+
+            for (unsigned int y = 0; y < copy_height; y++) {
+                uint8_t *src_location = alpha_frame->data[0] + (alpha_frame->linesize[0] * y);
+                uint8_t *dest_location = decoded_frame->data[3] + (decoded_frame->linesize[3] * y);
+
+                memcpy(dest_location, src_location, alpha_frame->linesize[0]);
+            }
+        }
+    }
+
+err:
+    av_frame_free(&alpha_frame);
+    if (ret < 0) {
+        avcodec_free_context(&s->alpha_ctx);
+    }
+    av_packet_free(&alpha_pkt);
+    return ret;
 }
 
 #if CONFIG_VP7_DECODER
@@ -2831,6 +2986,9 @@ av_cold int ff_vp8_decode_free(AVCodecContext *avctx)
     vp8_decode_flush_impl(avctx, 1);
     for (i = 0; i < FF_ARRAY_ELEMS(s->frames); i++)
         av_frame_free(&s->frames[i].tf.f);
+
+    if (s->alpha_ctx)
+        avcodec_free_context(&s->alpha_ctx);
 
     return 0;
 }
