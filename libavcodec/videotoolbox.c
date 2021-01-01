@@ -27,6 +27,7 @@
 #include "libavutil/avutil.h"
 #include "libavutil/hwcontext.h"
 #include "libavutil/pixdesc.h"
+#include "libavformat/vpcc.h"
 #include "bytestream.h"
 #include "decode.h"
 #include "h264dec.h"
@@ -43,6 +44,10 @@
 
 #if !HAVE_KCMVIDEOCODECTYPE_HEVC
 enum { kCMVideoCodecType_HEVC = 'hvc1' };
+#endif
+
+#if !HAVE_KCMVIDEOCODECTYPE_VP9
+enum { kCMVideoCodecType_VP9 = 'vp09' };
 #endif
 
 #define VIDEOTOOLBOX_ESDS_EXTRADATA_PADDING  12
@@ -327,6 +332,185 @@ CFDataRef ff_videotoolbox_hvcc_extradata_create(AVCodecContext *avctx)
     av_assert0(p - vt_extradata == vt_extradata_size);
 
     data = CFDataCreate(kCFAllocatorDefault, vt_extradata, vt_extradata_size);
+    av_free(vt_extradata);
+    return data;
+}
+
+enum VPX_CHROMA_SUBSAMPLING
+{
+    VPX_SUBSAMPLING_420_VERTICAL = 0,
+    VPX_SUBSAMPLING_420_COLLOCATED_WITH_LUMA = 1,
+    VPX_SUBSAMPLING_422 = 2,
+    VPX_SUBSAMPLING_444 = 3,
+};
+
+static int get_vpx_chroma_subsampling(enum AVPixelFormat pixel_format,
+                                      enum AVChromaLocation chroma_location)
+{
+    int chroma_w, chroma_h;
+    if (av_pix_fmt_get_chroma_sub_sample(pixel_format, &chroma_w, &chroma_h) == 0) {
+        if (chroma_w == 1 && chroma_h == 1) {
+            return (chroma_location == AVCHROMA_LOC_LEFT)
+                       ? VPX_SUBSAMPLING_420_VERTICAL
+                       : VPX_SUBSAMPLING_420_COLLOCATED_WITH_LUMA;
+        } else if (chroma_w == 1 && chroma_h == 0) {
+            return VPX_SUBSAMPLING_422;
+        } else if (chroma_w == 0 && chroma_h == 0) {
+            return VPX_SUBSAMPLING_444;
+        }
+    }
+    return -1;
+}
+
+static int get_bit_depth(enum AVPixelFormat pixel_format)
+{
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(pixel_format);
+    if (desc == NULL) {
+        return -1;
+    }
+    return desc->comp[0].depth;
+}
+
+static int get_vpx_video_full_range_flag(enum AVColorRange color_range)
+{
+    return color_range == AVCOL_RANGE_JPEG;
+}
+
+// Find approximate VP9 level based on the Luma's Sample rate and Picture size.
+static int get_vp9_level(AVCodecContext *avctx, AVRational *frame_rate) {
+    int picture_size = avctx->width * avctx->height;
+    int64_t sample_rate;
+
+    // All decisions will be based on picture_size, if frame rate is missing/invalid
+    if (!frame_rate || !frame_rate->den)
+        sample_rate = 0;
+    else
+        sample_rate = ((int64_t)picture_size * frame_rate->num) / frame_rate->den;
+
+    if (picture_size <= 0) {
+        return 0;
+    } else if (sample_rate <= 829440     && picture_size <= 36864) {
+        return 10;
+    } else if (sample_rate <= 2764800    && picture_size <= 73728) {
+        return 11;
+    } else if (sample_rate <= 4608000    && picture_size <= 122880) {
+        return 20;
+    } else if (sample_rate <= 9216000    && picture_size <= 245760) {
+        return 21;
+    } else if (sample_rate <= 20736000   && picture_size <= 552960) {
+        return 30;
+    } else if (sample_rate <= 36864000   && picture_size <= 983040) {
+        return 31;
+    } else if (sample_rate <= 83558400   && picture_size <= 2228224) {
+        return 40;
+    } else if (sample_rate <= 160432128  && picture_size <= 2228224) {
+        return 41;
+    } else if (sample_rate <= 311951360  && picture_size <= 8912896) {
+        return 50;
+    } else if (sample_rate <= 588251136  && picture_size <= 8912896) {
+        return 51;
+    } else if (sample_rate <= 1176502272 && picture_size <= 8912896) {
+        return 52;
+    } else if (sample_rate <= 1176502272 && picture_size <= 35651584) {
+        return 60;
+    } else if (sample_rate <= 2353004544 && picture_size <= 35651584) {
+        return 61;
+    } else if (sample_rate <= 4706009088 && picture_size <= 35651584) {
+        return 62;
+    } else {
+        return 0;
+    }
+}
+
+static int get_vpcc_features(AVCodecContext *avctx, AVRational *frame_rate,
+                             VPCC *vpcc)
+{
+    int profile = avctx->profile;
+    int level = avctx->level == FF_LEVEL_UNKNOWN ?
+        get_vp9_level(avctx, frame_rate) : avctx->level;
+    int bit_depth = get_bit_depth(avctx->pix_fmt);
+    int vpx_chroma_subsampling =
+        get_vpx_chroma_subsampling(avctx->pix_fmt,
+                                   avctx->chroma_sample_location);
+    int vpx_video_full_range_flag =
+        get_vpx_video_full_range_flag(avctx->color_range);
+
+    if (bit_depth < 0 || vpx_chroma_subsampling < 0)
+        return AVERROR_INVALIDDATA;
+
+    if (profile == FF_PROFILE_UNKNOWN) {
+        if (vpx_chroma_subsampling == VPX_SUBSAMPLING_420_VERTICAL ||
+            vpx_chroma_subsampling == VPX_SUBSAMPLING_420_COLLOCATED_WITH_LUMA) {
+            profile = (bit_depth == 8) ? FF_PROFILE_VP9_0 : FF_PROFILE_VP9_2;
+        } else {
+            profile = (bit_depth == 8) ? FF_PROFILE_VP9_1 : FF_PROFILE_VP9_3;
+        }
+    }
+
+    vpcc->profile            = profile;
+    vpcc->level              = level;
+    vpcc->bitdepth           = bit_depth;
+    vpcc->chroma_subsampling = vpx_chroma_subsampling;
+    vpcc->full_range_flag    = vpx_video_full_range_flag;
+
+    return 0;
+}
+
+#define VPCC_FULLBOX_SIZE (4 + 8)
+static CFDataRef videotoolbox_vpcc_extradata_create(AVCodecContext *avctx)
+{
+    VPCC vpcc;
+    uint8_t *vt_extradata = av_malloc(VPCC_FULLBOX_SIZE);
+    CFDataRef data = NULL;
+    int ret;
+
+    if (!vt_extradata) {
+        return NULL;
+    }
+
+    ret = get_vpcc_features(avctx, NULL, &vpcc);
+    if (ret < 0) {
+        av_free(vt_extradata);
+        return NULL;
+    }
+
+    /*
+     * Apple requires this to be the FullBox structure, thus prepend:
+     * unsigned int(8)  version = 1;
+     * bit(24)          flags = 0;
+     */
+    AV_W8(vt_extradata + 0, 1);
+    AV_WB24(vt_extradata + 1, 0);
+
+    /* unsigned int(8)     profile; */
+    AV_W8(vt_extradata + 4, vpcc.profile);
+
+    /* unsigned int(8)     level; */
+    AV_W8(vt_extradata + 5, vpcc.level);
+
+    /**
+     * unsigned int(4)     bitDepth;
+     * unsigned int(3)     chromaSubsampling;
+     * unsigned int(1)     videoFullRangeFlag;
+     */
+    AV_W8(vt_extradata + 6, (vpcc.bitdepth << 4) | (vpcc.chroma_subsampling << 1) | vpcc.full_range_flag);
+
+    /* unsigned int(8)     colourPrimaries; */
+    AV_W8(vt_extradata + 7, avctx->color_primaries);
+
+    /* unsigned int(8)     transferCharacteristics; */
+    AV_W8(vt_extradata + 8, avctx->color_trc);
+
+    /* unsigned int(8)     matrixCoefficients; */
+    AV_W8(vt_extradata + 9, avctx->colorspace);
+
+    /*
+     * unsigned int(16)    codecIntializationDataSize;
+     * vp9 does not have codec initialization data, thus set to 0.
+     */
+    AV_WB16(vt_extradata + 10, 0);
+
+    data = CFDataCreate(kCFAllocatorDefault, vt_extradata, VPCC_FULLBOX_SIZE);
     av_free(vt_extradata);
     return data;
 }
@@ -753,6 +937,11 @@ static CFDictionaryRef videotoolbox_decoder_config_create(CMVideoCodecType codec
         if (data)
             CFDictionarySetValue(avc_info, CFSTR("hvcC"), data);
         break;
+    case kCMVideoCodecType_VP9 :
+        data = videotoolbox_vpcc_extradata_create(avctx);
+        if (data)
+            CFDictionarySetValue(avc_info, CFSTR("vpcC"), data);
+        break;
     default:
         break;
     }
@@ -800,6 +989,12 @@ static int videotoolbox_start(AVCodecContext *avctx)
     case AV_CODEC_ID_MPEG4 :
         videotoolbox->cm_codec_type = kCMVideoCodecType_MPEG4Video;
         break;
+#if CONFIG_VP9_VIDEOTOOLBOX_HWACCEL
+    case AV_CODEC_ID_VP9:
+        videotoolbox->cm_codec_type = kCMVideoCodecType_VP9;
+        VTRegisterSupplementalVideoDecoderIfAvailable(videotoolbox->cm_codec_type);
+        break;
+#endif
     default :
         break;
     }
@@ -1214,6 +1409,24 @@ const AVHWAccel ff_mpeg4_videotoolbox_hwaccel = {
     .uninit         = videotoolbox_uninit,
     .priv_data_size = sizeof(VTContext),
 };
+
+#if CONFIG_VP9_VIDEOTOOLBOX_HWACCEL
+const AVHWAccel ff_vp9_videotoolbox_hwaccel = {
+    .name           = "vp9_videotoolbox",
+    .type           = AVMEDIA_TYPE_VIDEO,
+    .id             = AV_CODEC_ID_VP9,
+    .pix_fmt        = AV_PIX_FMT_VIDEOTOOLBOX,
+    .alloc_frame    = ff_videotoolbox_alloc_frame,
+    .start_frame    = videotoolbox_hevc_start_frame,
+    .decode_slice   = videotoolbox_common_decode_slice,
+    .decode_params  = videotoolbox_hevc_decode_params,
+    .end_frame      = videotoolbox_hevc_end_frame,
+    .frame_params   = videotoolbox_frame_params,
+    .init           = videotoolbox_common_init,
+    .uninit         = videotoolbox_uninit,
+    .priv_data_size = sizeof(VTContext),
+};
+#endif
 
 static AVVideotoolboxContext *av_videotoolbox_alloc_context_with_pix_fmt(enum AVPixelFormat pix_fmt,
                                                                          bool full_range)
