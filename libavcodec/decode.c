@@ -1906,26 +1906,39 @@ int ff_get_buffer(AVCodecContext *avctx, AVFrame *frame, int flags)
         }
     }
     ret = ff_decode_frame_props(avctx, frame);
-    if (ret < 0)
+    if (ret < 0) {
+        av_log(avctx, AV_LOG_ERROR, "decode_frame_props failed (%s)\n",
+               av_err2str(ret));
         goto fail;
+    }
 
     if (hwaccel) {
         if (hwaccel->alloc_frame) {
             ret = hwaccel->alloc_frame(avctx, frame);
+            if (ret < 0) {
+                av_log(avctx, AV_LOG_ERROR, "hwaccel alloc_frame failed (%s)\n",
+                       av_err2str(ret));
+            }
             goto end;
         }
     } else
         avctx->sw_pix_fmt = avctx->pix_fmt;
 
     ret = avctx->get_buffer2(avctx, frame, flags);
-    if (ret < 0)
+    if (ret < 0) {
+        av_log(avctx, AV_LOG_ERROR, "get_buffer2 failed (%s)\n",
+               av_err2str(ret));
         goto fail;
+    }
 
     validate_avframe_allocation(avctx, frame);
 
     ret = ff_attach_decode_data(frame);
-    if (ret < 0)
+    if (ret < 0) {
+        av_log(avctx, AV_LOG_ERROR, "ff_attach_decode_data failed (%s)\n",
+               av_err2str(ret));
         goto fail;
+    }
 
 end:
     if (avctx->codec_type == AVMEDIA_TYPE_VIDEO && !override_dimensions &&
