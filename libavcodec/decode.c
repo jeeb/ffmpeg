@@ -1666,6 +1666,9 @@ int avcodec_default_get_buffer2(AVCodecContext *avctx, AVFrame *frame, int flags
 {
     int ret;
 
+    av_log(avctx, AV_LOG_VERBOSE, "%s entered\n",
+           __func__);
+
     if (avctx->hw_frames_ctx) {
         ret = av_hwframe_get_buffer(avctx->hw_frames_ctx, frame, 0);
         frame->width  = avctx->coded_width;
