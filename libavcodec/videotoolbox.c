@@ -22,6 +22,7 @@
 
 #include "config.h"
 #include "videotoolbox.h"
+#include "videotoolbox_vp9.h"
 #include "libavutil/hwcontext_videotoolbox.h"
 #include "vt_internal.h"
 #include "libavutil/avutil.h"
@@ -1199,6 +1200,16 @@ static int videotoolbox_mpeg_end_frame(AVCodecContext *avctx)
     return videotoolbox_common_end_frame(avctx, frame);
 }
 
+static int videotoolbox_vp9_end_frame(AVCodecContext *avctx)
+{
+    AVFrame *frame = ff_videotoolbox_get_vp9_frame(avctx);
+    VTContext *vtctx = avctx->internal->hwaccel_priv_data;
+
+    int ret = videotoolbox_common_end_frame(avctx, frame);
+    vtctx->bitstream_size = 0;
+    return ret;
+}
+
 static int videotoolbox_uninit(AVCodecContext *avctx)
 {
     VTContext *vtctx = avctx->internal->hwaccel_priv_data;
@@ -1420,7 +1431,7 @@ const AVHWAccel ff_vp9_videotoolbox_hwaccel = {
     .start_frame    = videotoolbox_hevc_start_frame,
     .decode_slice   = videotoolbox_common_decode_slice,
     .decode_params  = videotoolbox_hevc_decode_params,
-    .end_frame      = videotoolbox_hevc_end_frame,
+    .end_frame      = videotoolbox_vp9_end_frame,
     .frame_params   = videotoolbox_frame_params,
     .init           = videotoolbox_common_init,
     .uninit         = videotoolbox_uninit,
