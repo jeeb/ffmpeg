@@ -1671,13 +1671,20 @@ int avcodec_default_get_buffer2(AVCodecContext *avctx, AVFrame *frame, int flags
 
     if (avctx->hw_frames_ctx) {
         ret = av_hwframe_get_buffer(avctx->hw_frames_ctx, frame, 0);
+        if (ret < 0)
+            av_log(avctx, AV_LOG_ERROR, "hwframe get_buffer failed! (%s)\n",
+                   av_err2str(ret));
+
         frame->width  = avctx->coded_width;
         frame->height = avctx->coded_height;
         return ret;
     }
 
-    if ((ret = update_frame_pool(avctx, frame)) < 0)
+    if ((ret = update_frame_pool(avctx, frame)) < 0) {
+        av_log(avctx, AV_LOG_ERROR, "update_frame_pool failed! (%s)\n",
+               av_err2str(ret));
         return ret;
+    }
 
     switch (avctx->codec_type) {
     case AVMEDIA_TYPE_VIDEO:
