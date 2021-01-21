@@ -149,6 +149,14 @@ Metadata of the packets of the file. The specified metadata will be set for
 each file packet. You can specify this directive multiple times to add multiple
 metadata entries.
 
+@item @code{input_options @var{key=value:key2=value2}}
+Input options passed on when reading a specific file, using a @code{:}-separated
+list of key=value pairs. Requires @code{safe} to be non-positive. Global options
+for all files can be set with the @code{input_options} demuxer option. When using
+both options on the list of files as well as globally via the demuxer option,
+the global ones get applied first and the file-specific options are then applied
+on top of them.
+
 @item @code{stream}
 Introduce a stream in the virtual file.
 All subsequent stream-related directives apply to the last introduced
@@ -203,6 +211,10 @@ the duration of the respective file segments in the concatenated output
 expressed in microseconds. The duration metadata is only set if it is known
 based on the concat file.
 The default is 0.
+
+@item input_options
+Input options to be passed on for all opened inputs using a :-separated list of
+key=value pairs.
 
 @end table
 

@@ -52,6 +52,7 @@ typedef struct {
     int64_t outpoint;
     AVDictionary *metadata;
     int nb_streams;
+    AVDictionary *input_options;
 } ConcatFile;
 
 typedef struct {
@@ -66,6 +67,7 @@ typedef struct {
     ConcatMatchMode stream_match_mode;
     unsigned auto_convert;
     int segment_time_metadata;
+    AVDictionary *input_options;
 } ConcatContext;
 
 static int concat_probe(const AVProbeData *probe)
@@ -329,6 +331,7 @@ static int open_file(AVFormatContext *avf, unsigned fileno)
 {
     ConcatContext *cat = avf->priv_data;
     ConcatFile *file = &cat->files[fileno];
+    AVDictionary *options = NULL;
     int ret;
 
     if (cat->avf)
@@ -344,12 +347,37 @@ static int open_file(AVFormatContext *avf, unsigned fileno)
     if ((ret = ff_copy_whiteblacklists(cat->avf, avf)) < 0)
         return ret;
 
-    if ((ret = avformat_open_input(&cat->avf, file->url, NULL, NULL)) < 0 ||
+    // Apply global AVOptions first
+    if (cat->input_options &&
+        (ret = av_dict_copy(&options, cat->input_options, 0) < 0))
+        return ret;
+
+    // then apply file-specific AVOptions
+    if (file->input_options &&
+        (ret = av_dict_copy(&options, file->input_options, 0) < 0))
+        return ret;
+
+    if ((ret = avformat_open_input(&cat->avf, file->url, NULL, &options)) < 0 ||
         (ret = avformat_find_stream_info(cat->avf, NULL)) < 0) {
         av_log(avf, AV_LOG_ERROR, "Impossible to open '%s'\n", file->url);
         avformat_close_input(&cat->avf);
+        av_dict_free(&options);
         return ret;
     }
+
+    if (av_dict_count(options)) {
+        AVDictionaryEntry *en = NULL;
+
+        while ((en = av_dict_get(options, "", en, AV_DICT_IGNORE_SUFFIX))) {
+            av_log(avf, AV_LOG_WARNING,
+                   "Option '%s' set to '%s' was ignored when opening %s "
+                   "with the %s reader!\n",
+                   en->key, en->value, file->url, cat->avf->iformat->name);
+        }
+    }
+
+    av_dict_free(&options);
+
     cat->cur_file = file;
     file->start_time = !fileno ? 0 :
                        cat->files[fileno - 1].start_time +
@@ -386,6 +414,7 @@ static int concat_read_close(AVFormatContext *avf)
         }
         av_freep(&cat->files[i].streams);
         av_dict_free(&cat->files[i].metadata);
+        av_dict_free(&cat->files[i].input_options);
     }
     if (cat->avf)
         avformat_close_input(&cat->avf);
@@ -457,6 +486,41 @@ static int concat_read_header(AVFormatContext *avf)
                 FAIL(AVERROR_INVALIDDATA);
             }
             av_freep(&metadata);
+        } else if (!strncmp(keyword, "input_options", 13)) {
+            if (!file) {
+                av_log(avf, AV_LOG_ERROR, "Line %d: %s without file\n",
+                       line, keyword);
+                FAIL(AVERROR_INVALIDDATA);
+            }
+
+            if (cat->safe > 0) {
+                av_log(avf, AV_LOG_ERROR,
+                       "Line %d: Input options cannot be set in file list in "
+                       "safe mode!\n", line);
+                FAIL(AVERROR(EPERM));
+            }
+
+            {
+                char *input_options = av_get_token((const char **)&cursor,
+                                                   SPACE_CHARS);
+                if (!input_options) {
+                    av_log(avf, AV_LOG_ERROR,
+                           "Line %d: key=value pairs required!\n", line);
+                    FAIL(AVERROR_INVALIDDATA);
+                }
+
+                if ((ret =
+                     av_dict_parse_string(&file->input_options, input_options,
+                                          "=", ":", 0)) < 0) {
+                    av_log(avf, AV_LOG_ERROR,
+                           "Line %d: failed to parse input options string\n",
+                           line);
+                    av_freep(&input_options);
+                    FAIL(AVERROR_INVALIDDATA);
+                }
+
+                av_freep(&input_options);
+            }
         } else if (!strcmp(keyword, "stream")) {
             if (!avformat_new_stream(avf, NULL))
                 FAIL(AVERROR(ENOMEM));
@@ -764,6 +828,9 @@ static const AVOption options[] = {
       OFFSET(auto_convert), AV_OPT_TYPE_BOOL, {.i64 = 1}, 0, 1, DEC },
     { "segment_time_metadata", "output file segment start time and duration as packet metadata",
       OFFSET(segment_time_metadata), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, DEC },
+    { "input_options",
+      "set options for all opened inputs using a :-separated list of key=value pairs",
+      OFFSET(input_options), AV_OPT_TYPE_DICT, { .str = NULL }, 0, 0, DEC },
     { NULL }
 };
 
