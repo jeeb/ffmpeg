@@ -101,10 +101,12 @@ int main(int argc, char **argv)
             break;
         }
         case 'm':
-            if      (!strcmp(optarg, "auto"))          escape_mode = AV_ESCAPE_MODE_AUTO;
-            else if (!strcmp(optarg, "backslash"))     escape_mode = AV_ESCAPE_MODE_BACKSLASH;
-            else if (!strcmp(optarg, "quote"))         escape_mode = AV_ESCAPE_MODE_QUOTE;
-            else if (!strcmp(optarg, "xml_char_data")) escape_mode = AV_ESCAPE_MODE_XML_CHAR_DATA;
+            if      (!strcmp(optarg, "auto"))                        escape_mode = AV_ESCAPE_MODE_AUTO;
+            else if (!strcmp(optarg, "backslash"))                   escape_mode = AV_ESCAPE_MODE_BACKSLASH;
+            else if (!strcmp(optarg, "quote"))                       escape_mode = AV_ESCAPE_MODE_QUOTE;
+            else if (!strcmp(optarg, "xml_char_data"))               escape_mode = AV_ESCAPE_MODE_XML_CHAR_DATA;
+            else if (!strcmp(optarg, "xml_att_value_single_quoted")) escape_mode = AV_ESCAPE_MODE_XML_ATT_VALUE_SINGLE_QUOTED;
+            else if (!strcmp(optarg, "xml_att_value_double_quoted")) escape_mode = AV_ESCAPE_MODE_XML_ATT_VALUE_DOUBLE_QUOTED;
             else {
                 av_log(NULL, AV_LOG_ERROR,
                        "Invalid value '%s' for option -m, "

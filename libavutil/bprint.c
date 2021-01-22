@@ -298,6 +298,32 @@ void av_bprint_escape(AVBPrint *dstbuf, const char *src, const char *special_cha
         }
         break;
 
+    case AV_ESCAPE_MODE_XML_ATT_VALUE_SINGLE_QUOTED:
+        /* escape XML single quoted attribute values as per 2.3 */
+        /* "'" ([^<&'] | Reference)* "'" */
+        for (; *src; src++) {
+            switch (*src) {
+            case '&' : av_bprintf(dstbuf, "%s", "&amp;");  break;
+            case '<' : av_bprintf(dstbuf, "%s", "&lt;");   break;
+            case '\'': av_bprintf(dstbuf, "%s", "&apos;"); break;
+            default: av_bprint_chars(dstbuf, *src, 1);
+            }
+        }
+        break;
+
+    case AV_ESCAPE_MODE_XML_ATT_VALUE_DOUBLE_QUOTED:
+        /* escape XML double quoted attribute values as per 2.3 */
+        /* '"' ([^<&"] | Reference)* '"' */
+        for (; *src; src++) {
+            switch (*src) {
+            case '&' : av_bprintf(dstbuf, "%s", "&amp;");  break;
+            case '<' : av_bprintf(dstbuf, "%s", "&lt;");   break;
+            case '"' : av_bprintf(dstbuf, "%s", "&quot;"); break;
+            default: av_bprint_chars(dstbuf, *src, 1);
+            }
+        }
+        break;
+
     /* case AV_ESCAPE_MODE_BACKSLASH or unknown mode */
     default:
         /* \-escape characters */
