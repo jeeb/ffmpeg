@@ -124,6 +124,7 @@ typedef struct AOMEncoderContext {
     int enable_diff_wtd_comp;
     int enable_dist_wtd_comp;
     int enable_dual_filter;
+    AVDictionary *extra_params;
 } AOMContext;
 
 static const char *const ctlidstr[] = {
@@ -312,6 +313,25 @@ static av_cold int codecctl_int(AVCodecContext *avctx,
         snprintf(buf, sizeof(buf), "Failed to set %s codec control",
                  ctlidstr[id]);
         log_encoder_error(avctx, buf);
+        return AVERROR(EINVAL);
+    }
+
+    return 0;
+}
+
+static av_cold int codec_set_option(AVCodecContext *avctx,
+                                    const char* key,
+                                    const char* value)
+{
+    AOMContext *ctx = avctx->priv_data;
+    int width = -30;
+    int res;
+
+    av_log(avctx, AV_LOG_DEBUG, "  %*s: %s\n", width, key, value);
+
+    res = aom_codec_set_option(&ctx->encoder, key, value);
+    if (res != AOM_CODEC_OK) {
+        log_encoder_error(avctx, key);
         return AVERROR(EINVAL);
     }
 
@@ -874,6 +894,15 @@ static av_cold int aom_init(AVCodecContext *avctx,
         codecctl_int(avctx, AV1E_SET_ENABLE_INTRABC, ctx->enable_intrabc);
 #endif
 
+#if AOM_ENCODER_ABI_VERSION >= 23
+    {
+      AVDictionaryEntry *en = NULL;
+      while ((en = av_dict_get(ctx->extra_params, "", en, AV_DICT_IGNORE_SUFFIX))) {
+        codec_set_option(avctx, en->key, en->value);
+      }
+    }
+#endif
+
     // provide dummy value to initialize wrapper, values will be updated each _encode()
     aom_img_wrap(&ctx->rawimg, img_fmt, avctx->width, avctx->height, 1,
                  (unsigned char*)1);
@@ -1299,6 +1328,7 @@ static const AVOption options[] = {
     { "enable-masked-comp",           "Enable masked compound",                            OFFSET(enable_masked_comp),           AV_OPT_TYPE_BOOL, {.i64 = -1}, -1, 1, VE},
     { "enable-interintra-comp",       "Enable interintra compound",                        OFFSET(enable_interintra_comp),       AV_OPT_TYPE_BOOL, {.i64 = -1}, -1, 1, VE},
     { "enable-smooth-interintra",     "Enable smooth interintra mode",                     OFFSET(enable_smooth_interintra),     AV_OPT_TYPE_BOOL, {.i64 = -1}, -1, 1, VE},
+    { "libaom-params",                "Extra parameters for libaom",                       OFFSET(extra_params),                 AV_OPT_TYPE_DICT, { 0 },        0, 0, VE },
     { NULL },
 };
 
