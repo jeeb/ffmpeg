@@ -1634,7 +1634,10 @@ typedef struct AVCodecContext {
 
     /**
      * Error recognition; may misdetect some more or less valid parts as errors.
-     * - encoding: unused
+     * - encoding: Set by user. Currently only AV_EF_EXPLODE is valid, and only
+     *             for subtitle encoders, since checking the validity of an ASS
+     *             dialog line is currently the responsibility of the following
+     *             encoder.
      * - decoding: Set by user.
      */
     int err_recognition;
