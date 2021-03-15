@@ -40,6 +40,7 @@ typedef struct {
     AVCodecContext *avctx;
     ASSSplitContext *ass_ctx;
     AVBPrint buffer;
+    ASSStyle *default_style;
 } TTMLContext;
 
 static void ttml_text_cb(void *priv, const char *text, int len)
@@ -122,6 +123,8 @@ static int ttml_encode_frame(AVCodecContext *avctx, uint8_t *buf,
                 return AVERROR(ENOMEM);
 
             {
+                av_bprintf(&s->buffer, "<span region=\"%s\">",
+                           dialog->style ? dialog->style : "Default");
                 int ret = ff_ass_split_override_codes(&ttml_callbacks, s,
                                                       dialog->text);
                 int log_level = (ret != AVERROR_INVALIDDATA ||
@@ -139,6 +142,8 @@ static int ttml_encode_frame(AVCodecContext *avctx, uint8_t *buf,
                         return ret;
                     }
                 }
+
+                av_bprintf(&s->buffer, "</span>");
 
                 ff_ass_free_dialog(&dialog);
             }
@@ -173,16 +178,204 @@ static av_cold int ttml_encode_close(AVCodecContext *avctx)
     return 0;
 }
 
+static const char *ttml_get_display_alignment(int alignment)
+{
+    switch (alignment) {
+    case 1:
+    case 2:
+    case 3:
+        return "after";
+    case 4:
+    case 5:
+    case 6:
+        return "center";
+    case 7:
+    case 8:
+    case 9:
+        return "before";
+    default:
+        return NULL;
+    }
+}
+
+static const char *ttml_get_text_alignment(int alignment)
+{
+    switch (alignment) {
+    case 1:
+    case 4:
+    case 7:
+        return "left";
+    case 2:
+    case 5:
+    case 8:
+        return "center";
+    case 3:
+    case 6:
+    case 9:
+        return "right";
+    default:
+        return NULL;
+    }
+}
+
+static int ttml_get_origin(ASSScriptInfo script_info, ASSStyle *style,
+                           double *origin_left, double *origin_top)
+{
+    if (!style)
+        return AVERROR_INVALIDDATA;
+
+    if (!script_info.play_res_x || !script_info.play_res_y)
+        return AVERROR_INVALIDDATA;
+
+    *origin_left = (style->margin_l / script_info.play_res_x);
+    *origin_top = style->alignment >= 7 ?
+                  (style->margin_v / script_info.play_res_y) :
+                  0;
+
+    return 0;
+}
+
+static int ttml_get_extent(ASSScriptInfo script_info, ASSStyle *style,
+                           double *width, double *height)
+{
+    if (!style)
+        return AVERROR_INVALIDDATA;
+
+    if (!script_info.play_res_x || !script_info.play_res_y)
+        return AVERROR_INVALIDDATA;
+
+    *width = 100.0 - (style->margin_r / script_info.play_res_x);
+    *height = (style->alignment <= 3) ?
+              100.0 - (style->margin_v / script_info.play_res_y) :
+              100.0;
+
+    return 0;
+}
+
+static const char ttml_region_template[] =
+"      <region xml:id=\"%s\"\n"
+"        tts:origin=\"%.3f%% %.3f%%\"\n"
+"        tts:extent=\"%.3f%% %.3f%%\"\n"
+"        tts:displayAlign=\"%s\"\n"
+"        tts:textAlign=\"%s\"\n"
+"        tts:overflow=\"visible\" />\n";
+
+static int ttml_write_region(AVCodecContext *avctx, AVBPrint *buf,
+                             ASSScriptInfo script_info,
+                             ASSStyle *style, unsigned int is_default)
+{
+    if (!style)
+        return AVERROR_INVALIDDATA;
+
+    const char *display_alignment =
+        ttml_get_display_alignment(style->alignment);
+    const char *text_alignment =
+        ttml_get_text_alignment(style->alignment);
+    double origin_left = 0;
+    double origin_top = 0;
+    double width = 0;
+    double height = 0;
+    int ret = AVERROR_BUG;
+
+    if (!display_alignment || !text_alignment) {
+        av_log(avctx, AV_LOG_ERROR,
+               "Failed to convert ASS style alignment %d of style %s to TTML display and "
+               "text alignment!\n", style->alignment, style->name);
+        return AVERROR_INVALIDDATA;
+    }
+
+    if ((ret = ttml_get_origin(script_info, style, &origin_left, &origin_top)) < 0) {
+        av_log(avctx, AV_LOG_ERROR,
+               "Failed to convert ASS style %s's margins (l: %d, v: %d) and "
+               "play resolution (%dx%d) to TTML origin information!\n",
+               style->name, style->margin_l, style->margin_v,
+               script_info.play_res_x, script_info.play_res_y);
+        return ret;
+    }
+
+    if ((ret = ttml_get_extent(script_info, style, &width, &height)) < 0) {
+        av_log(avctx, AV_LOG_ERROR,
+               "Failed to convert ASS style %s's margins (r: %d, v: %d) and "
+               "play resolution (%dx%d) to TTML origin information!\n",
+               style->name, style->margin_r, style->margin_v,
+               script_info.play_res_x, script_info.play_res_y);
+        return ret;
+    }
+
+    av_bprintf(buf, ttml_region_template, style->name,
+               origin_left, origin_top,
+               width, height,
+               display_alignment,
+               text_alignment);
+
+    return 0;
+}
+
 static int ttml_write_header_content(AVCodecContext *avctx)
 {
-    if (!(avctx->extradata = av_mallocz(TTMLENC_EXTRADATA_SIGNATURE_SIZE +
-                                        1 + AV_INPUT_BUFFER_PADDING_SIZE))) {
+    TTMLContext *s = avctx->priv_data;
+    ASS *ass = (ASS *)s->ass_ctx;
+    const size_t base_extradata_size = TTMLENC_EXTRADATA_SIGNATURE_SIZE + 1 +
+                                       AV_INPUT_BUFFER_PADDING_SIZE;
+    size_t ttml_head_size = 0;
+
+    // pick default style by either name or due to being the first one
+    ASSStyle *style = ff_ass_style_get(s->ass_ctx, "Default");
+    if (!style && ass->styles_count && ass->styles) {
+        style = &ass->styles[0];
+    }
+
+    if (!style)
+        goto write_signature;
+
+    s->default_style = style;
+
+    av_bprintf(&s->buffer, "  <head>\n");
+    av_bprintf(&s->buffer, "    <layout>\n");
+
+    {
+        // first, write the default style
+        int ret = ttml_write_region(avctx, &s->buffer, ass->script_info,
+                                    style, 1);
+        if (ret < 0)
+            return ret;
+    }
+
+    for (int i = 0; i < ass->styles_count; i++) {
+        int ret = AVERROR_BUG;
+        style = &ass->styles[i];
+        if (style == s->default_style)
+            continue;
+
+        if ((ret = ttml_write_region(avctx, &s->buffer, ass->script_info,
+                                     style, 0)) < 0)
+            return ret;
+    }
+
+    av_bprintf(&s->buffer, "    </layout>\n");
+    av_bprintf(&s->buffer, "  </head>\n");
+
+    if (!av_bprint_is_complete(&s->buffer)) {
         return AVERROR(ENOMEM);
     }
 
-    avctx->extradata_size = TTMLENC_EXTRADATA_SIGNATURE_SIZE;
+    ttml_head_size = s->buffer.len;
+
+write_signature:
+    if (!(avctx->extradata = av_mallocz(base_extradata_size + ttml_head_size))) {
+        return AVERROR(ENOMEM);
+    }
+
+    avctx->extradata_size = TTMLENC_EXTRADATA_SIGNATURE_SIZE + ttml_head_size;
     memcpy(avctx->extradata, TTMLENC_EXTRADATA_SIGNATURE,
            TTMLENC_EXTRADATA_SIGNATURE_SIZE);
+
+    if (ttml_head_size)
+        memcpy(avctx->extradata + TTMLENC_EXTRADATA_SIGNATURE_SIZE,
+               s->buffer.str,
+               avctx->extradata_size - TTMLENC_EXTRADATA_SIGNATURE_SIZE);
+
+    av_bprint_clear(&s->buffer);
 
     return 0;
 }
