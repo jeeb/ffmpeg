@@ -49,6 +49,7 @@ static const char ttml_header_text[] =
 "  xmlns:ttm=\"http://www.w3.org/ns/ttml#metadata\"\n"
 "  xmlns:tts=\"http://www.w3.org/ns/ttml#styling\"\n"
 "  xml:lang=\"%s\">\n"
+"%s"
 "  <body>\n"
 "    <div>\n";
 
@@ -103,8 +104,13 @@ static int ttml_write_header(AVFormatContext *ctx)
 
         avpriv_set_pts_info(st, 64, 1, 1000);
 
-        if (ttml_ctx->input_type == PACKET_TYPE_PARAGRAPH)
-            avio_printf(pb, ttml_header_text, printed_lang);
+        if (ttml_ctx->input_type == PACKET_TYPE_PARAGRAPH) {
+            const char *ttml_head =
+                st->codecpar->extradata_size > TTMLENC_EXTRADATA_SIGNATURE_SIZE ?
+                (const char *)st->codecpar->extradata + TTMLENC_EXTRADATA_SIGNATURE_SIZE:
+                "";
+            avio_printf(pb, ttml_header_text, printed_lang, ttml_head);
+        }
     }
 
     return 0;
