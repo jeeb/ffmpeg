@@ -37,18 +37,23 @@ enum TTMLPacketType {
     PACKET_TYPE_DOCUMENT,
 };
 
+struct TTMLHeaderParameters {
+    char *tt_element_params;
+    char *pre_body_elements;
+};
+
 typedef struct TTMLMuxContext {
     enum TTMLPacketType input_type;
     unsigned int document_written;
+    struct TTMLHeaderParameters header_params;
 } TTMLMuxContext;
 
 static const char ttml_header_text[] =
 "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
 "<tt\n"
-"  xmlns=\"http://www.w3.org/ns/ttml\"\n"
-"  xmlns:ttm=\"http://www.w3.org/ns/ttml#metadata\"\n"
-"  xmlns:tts=\"http://www.w3.org/ns/ttml#styling\"\n"
+"%s"
 "  xml:lang=\"%s\">\n"
+"%s"
 "  <body>\n"
 "    <div>\n";
 
@@ -70,6 +75,47 @@ static void ttml_write_time(AVIOContext *pb, const char tag[],
 
     avio_printf(pb, "%s=\"%02"PRId64":%02"PRId64":%02"PRId64".%03"PRId64"\"",
                 tag, hour, min, sec, millisec);
+}
+
+static int ttml_set_header_values_from_extradata(
+    AVCodecParameters *par, struct TTMLHeaderParameters *header_params)
+{
+    size_t additional_data_size =
+        par->extradata_size - TTMLENC_EXTRADATA_SIGNATURE_SIZE;
+
+    if (!additional_data_size) {
+        header_params->tt_element_params =
+            av_strndup(ttml_default_namespacing,
+                       sizeof(ttml_default_namespacing) - 1);
+        header_params->pre_body_elements = av_strndup("", 1);
+
+        if (!header_params->tt_element_params ||
+            !header_params->pre_body_elements)
+            return AVERROR(ENOMEM);
+
+        return 0;
+    }
+
+    {
+        char *value =
+            (char *)par->extradata + TTMLENC_EXTRADATA_SIGNATURE_SIZE;
+        size_t value_size = av_strnlen(value, additional_data_size);
+
+        if (!(header_params->tt_element_params = av_strndup(value, value_size)))
+            return AVERROR(ENOMEM);
+
+        additional_data_size -= value_size + 1;
+        value += value_size + 1;
+        if (additional_data_size <= 0)
+            return AVERROR_INVALIDDATA;
+
+        value_size = av_strnlen(value, additional_data_size);
+
+        if (!(header_params->pre_body_elements = av_strndup(value, value_size)))
+            return AVERROR(ENOMEM);
+
+        return 0;
+    }
 }
 
 static int ttml_write_header(AVFormatContext *ctx)
@@ -103,8 +149,21 @@ static int ttml_write_header(AVFormatContext *ctx)
 
         avpriv_set_pts_info(st, 64, 1, 1000);
 
-        if (ttml_ctx->input_type == PACKET_TYPE_PARAGRAPH)
-            avio_printf(pb, ttml_header_text, printed_lang);
+        if (ttml_ctx->input_type == PACKET_TYPE_PARAGRAPH) {
+            int ret = ttml_set_header_values_from_extradata(
+                st->codecpar, &ttml_ctx->header_params);
+            if (ret < 0) {
+                av_log(ctx, AV_LOG_ERROR,
+                       "Failed to parse TTML header values from extradata: "
+                       "%s!\n", av_err2str(ret));
+                return ret;
+            }
+
+            avio_printf(pb, ttml_header_text,
+                        ttml_ctx->header_params.tt_element_params,
+                        printed_lang,
+                        ttml_ctx->header_params.pre_body_elements);
+        }
     }
 
     return 0;
@@ -159,6 +218,14 @@ static int ttml_write_trailer(AVFormatContext *ctx)
     return 0;
 }
 
+static void ttml_free(AVFormatContext *ctx)
+{
+    TTMLMuxContext *ttml_ctx = ctx->priv_data;
+
+    av_freep(&(ttml_ctx->header_params.tt_element_params));
+    av_freep(&(ttml_ctx->header_params.pre_body_elements));
+}
+
 AVOutputFormat ff_ttml_muxer = {
     .name              = "ttml",
     .long_name         = NULL_IF_CONFIG_SMALL("TTML subtitle"),
@@ -171,4 +238,5 @@ AVOutputFormat ff_ttml_muxer = {
     .write_header      = ttml_write_header,
     .write_packet      = ttml_write_packet,
     .write_trailer     = ttml_write_trailer,
+    .deinit            = ttml_free,
 };
