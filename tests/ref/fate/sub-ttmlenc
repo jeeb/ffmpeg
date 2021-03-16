@@ -9,8 +9,8 @@
   <head>
     <layout>
       <region xml:id="Default"
-        tts:origin="0.000% 0.000%"
-        tts:extent="100.000% 100.000%"
+        tts:origin="2.604% 0.000%"
+        tts:extent="97.396% 96.528%"
         tts:displayAlign="after"
         tts:textAlign="center"
         tts:fontSize="1600.000%"
