@@ -48,7 +48,8 @@ static const char ttml_header_text[] =
 "  xmlns=\"http://www.w3.org/ns/ttml\"\n"
 "  xmlns:ttm=\"http://www.w3.org/ns/ttml#metadata\"\n"
 "  xmlns:tts=\"http://www.w3.org/ns/ttml#styling\"\n"
-"  xml:lang=\"%s\">\n"
+"  xmlns:ttp=\"http://www.w3.org/ns/ttml#parameter\"\n"
+"  xml:lang=\"%s\"\n"
 "%s"
 "  <body>\n"
 "    <div>\n";
