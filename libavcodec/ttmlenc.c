@@ -258,11 +258,7 @@ static int ttml_get_font_size(ASSScriptInfo script_info, ASSStyle *style,
     if (!style)
         return AVERROR_INVALIDDATA;
 
-    if (!script_info.play_res_y)
-        return AVERROR_INVALIDDATA;
-
-    *font_size = 100 *
-                 ((double)style->font_size / (double)script_info.play_res_y);
+    *font_size = 100 * style->font_size;
 
     return 0;
 }
@@ -355,6 +351,7 @@ static int ttml_write_header_content(AVCodecContext *avctx)
 {
     TTMLContext *s = avctx->priv_data;
     ASS *ass = (ASS *)s->ass_ctx;
+    ASSScriptInfo script_info = ass->script_info;
     const size_t base_extradata_size = TTMLENC_EXTRADATA_SIGNATURE_SIZE + 1 +
                                        AV_INPUT_BUFFER_PADDING_SIZE;
     size_t ttml_head_size = 0;
@@ -369,6 +366,12 @@ static int ttml_write_header_content(AVCodecContext *avctx)
         goto write_signature;
 
     s->default_style = style;
+
+    if (script_info.play_res_x && script_info.play_res_y)
+        av_bprintf(&s->buffer, "  ttp:cellResolution=\"%d %d\"",
+                   script_info.play_res_x, script_info.play_res_y);
+
+    av_bprintf(&s->buffer, ">\n");
 
     av_bprintf(&s->buffer, "  <head>\n");
     av_bprintf(&s->buffer, "    <layout>\n");
