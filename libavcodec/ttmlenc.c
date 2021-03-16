@@ -252,13 +252,35 @@ static int ttml_get_extent(ASSScriptInfo script_info, ASSStyle *style,
     return 0;
 }
 
+static int ttml_get_font_size(ASSScriptInfo script_info, ASSStyle *style,
+                              double *font_size)
+{
+    if (!style)
+        return AVERROR_INVALIDDATA;
+
+    if (!script_info.play_res_y)
+        return AVERROR_INVALIDDATA;
+
+    *font_size = 100 *
+                 ((double)style->font_size / (double)script_info.play_res_y);
+
+    return 0;
+}
+
+static const char ttml_region_start[] =
+"      <region xml:id=\"%s\"\n";
+
 static const char ttml_region_template[] =
 "      <region xml:id=\"%s\"\n"
 "        tts:origin=\"%.3f%% %.3f%%\"\n"
 "        tts:extent=\"%.3f%% %.3f%%\"\n"
 "        tts:displayAlign=\"%s\"\n"
 "        tts:textAlign=\"%s\"\n"
+"        tts:fontSize=\"%.3f%%\"\n"
+"        tts:fontFamily=\"%s\"\n"
 "        tts:overflow=\"visible\" />\n";
+
+static const char ttml_region_end[] = " />\n";
 
 static int ttml_write_region(AVCodecContext *avctx, AVBPrint *buf,
                              ASSScriptInfo script_info,
@@ -275,6 +297,7 @@ static int ttml_write_region(AVCodecContext *avctx, AVBPrint *buf,
     double origin_top = 0;
     double width = 0;
     double height = 0;
+    double font_size = 0;
     int ret = AVERROR_BUG;
 
     if (!display_alignment || !text_alignment) {
@@ -296,8 +319,23 @@ static int ttml_write_region(AVCodecContext *avctx, AVBPrint *buf,
     if ((ret = ttml_get_extent(script_info, style, &width, &height)) < 0) {
         av_log(avctx, AV_LOG_ERROR,
                "Failed to convert ASS style %s's margins (r: %d, v: %d) and "
-               "play resolution (%dx%d) to TTML origin information!\n",
+               "play resolution (%dx%d) to TTML extent information!\n",
                style->name, style->margin_r, style->margin_v,
+               script_info.play_res_x, script_info.play_res_y);
+        return ret;
+    }
+
+        av_log(avctx, AV_LOG_INFO,
+               "Converting ASS style %s's font size (%d) and "
+               "play resolution (%dx%d) to TTML font size!\n",
+               style->name, style->font_size,
+               script_info.play_res_x, script_info.play_res_y);
+
+    if ((ret = ttml_get_font_size(script_info, style, &font_size)) < 0) {
+        av_log(avctx, AV_LOG_ERROR,
+               "Failed to convert ASS style %s's font size (%d) and "
+               "play resolution (%dx%d) to TTML font size!\n",
+               style->name, style->font_size,
                script_info.play_res_x, script_info.play_res_y);
         return ret;
     }
@@ -306,7 +344,9 @@ static int ttml_write_region(AVCodecContext *avctx, AVBPrint *buf,
                origin_left, origin_top,
                width, height,
                display_alignment,
-               text_alignment);
+               text_alignment,
+               font_size,
+               style->font_name);
 
     return 0;
 }
