@@ -11,6 +11,8 @@
         tts:extent="100.000% 100.000%"
         tts:displayAlign="after"
         tts:textAlign="center"
+        tts:fontSize="5.556%"
+        tts:fontFamily="Arial"
         tts:overflow="visible" />
     </layout>
   </head>
