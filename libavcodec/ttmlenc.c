@@ -227,9 +227,9 @@ static int ttml_get_origin(ASSScriptInfo script_info, ASSStyle *style,
     if (!script_info.play_res_x || !script_info.play_res_y)
         return AVERROR_INVALIDDATA;
 
-    *origin_left = (style->margin_l / script_info.play_res_x);
+    *origin_left = 100.0 * ((double)style->margin_l / (double)script_info.play_res_x);
     *origin_top = style->alignment >= 7 ?
-                  (style->margin_v / script_info.play_res_y) :
+                  100.0 * ((double)style->margin_v / (double)script_info.play_res_y) :
                   0;
 
     return 0;
@@ -244,9 +244,9 @@ static int ttml_get_extent(ASSScriptInfo script_info, ASSStyle *style,
     if (!script_info.play_res_x || !script_info.play_res_y)
         return AVERROR_INVALIDDATA;
 
-    *width = 100.0 - (style->margin_r / script_info.play_res_x);
+    *width = 100.0 - (100.0 * ((double)style->margin_r / (double)script_info.play_res_x));
     *height = (style->alignment <= 3) ?
-              100.0 - (style->margin_v / script_info.play_res_y) :
+              100.0 - (100.0 * ((double)style->margin_v / (double)script_info.play_res_y)) :
               100.0;
 
     return 0;
