@@ -237,11 +237,35 @@ static const char *ttml_get_text_alignment(int alignment)
     }
 }
 
+static void ttml_get_origin(ASSScriptInfo script_info, ASSStyle *style,
+                           int *origin_left, int *origin_top)
+{
+    *origin_left = av_rescale(style->margin_l, 100, script_info.play_res_x);
+    *origin_top  =
+        av_rescale((style->alignment >= 7) ? style->margin_v : 0,
+                   100, script_info.play_res_y);
+}
+
+static void ttml_get_extent(ASSScriptInfo script_info, ASSStyle *style,
+                           int *width, int *height)
+{
+    *width  = av_rescale(script_info.play_res_x - style->margin_r,
+                         100, script_info.play_res_x);
+    *height = av_rescale((style->alignment <= 3) ?
+                         script_info.play_res_y - style->margin_v :
+                         script_info.play_res_y,
+                         100, script_info.play_res_y);
+}
+
 static int ttml_write_region(AVCodecContext *avctx, AVBPrint *buf,
-                             ASSStyle *style)
+                             ASSScriptInfo script_info, ASSStyle *style)
 {
     const char *display_alignment = NULL;
     const char *text_alignment = NULL;
+    int origin_left = 0;
+    int origin_top  = 0;
+    int width = 0;
+    int height = 0;
 
     if (!style)
         return AVERROR_INVALIDDATA;
@@ -257,6 +281,14 @@ static int ttml_write_region(AVCodecContext *avctx, AVBPrint *buf,
         return AVERROR_INVALIDDATA;
     }
 
+    if (style->margin_l < 0 || style->margin_r < 0 || style->margin_v < 0) {
+        av_log(avctx, AV_LOG_ERROR,
+               "One or more negative margin values in subtitle style: "
+               "left: %d, right: %d, vertical: %d!\n",
+               style->margin_l, style->margin_r, style->margin_v);
+        return AVERROR_INVALIDDATA;
+    }
+
     display_alignment = ttml_get_display_alignment(style->alignment);
     text_alignment = ttml_get_text_alignment(style->alignment);
     if (!display_alignment || !text_alignment) {
@@ -268,10 +300,18 @@ static int ttml_write_region(AVCodecContext *avctx, AVBPrint *buf,
         return AVERROR_INVALIDDATA;
     }
 
+    ttml_get_origin(script_info, style, &origin_left, &origin_top);
+    ttml_get_extent(script_info, style, &width, &height);
+
     av_bprintf(buf, "      <region xml:id=\"");
     av_bprint_escape(buf, style->name, NULL, AV_ESCAPE_MODE_XML,
                      AV_ESCAPE_FLAG_XML_DOUBLE_QUOTES);
     av_bprintf(buf, "\"\n");
+
+    av_bprintf(buf, "        tts:origin=\"%d%% %d%%\"\n",
+               origin_left, origin_top);
+    av_bprintf(buf, "        tts:extent=\"%d%% %d%%\"\n",
+               width, height);
 
     av_bprintf(buf, "        tts:displayAlign=\"");
     av_bprint_escape(buf, display_alignment, NULL, AV_ESCAPE_MODE_XML,
@@ -335,7 +375,7 @@ static int ttml_write_header_content(AVCodecContext *avctx)
 
     for (int i = 0; i < ass->styles_count; i++) {
         ASSStyle *style = &ass->styles[i];
-        int ret = ttml_write_region(avctx, &s->buffer, style);
+        int ret = ttml_write_region(avctx, &s->buffer, script_info, style);
         if (ret < 0)
             return ret;
     }
