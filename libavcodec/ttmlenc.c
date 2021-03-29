@@ -254,6 +254,26 @@ static const char *ttml_get_text_alignment(int alignment)
     }
 }
 
+static void ttml_get_origin(ASSScriptInfo script_info, ASSStyle *style,
+                           int *origin_left, int *origin_top)
+{
+    *origin_left = av_rescale(style->margin_l, 100, script_info.play_res_x);
+    *origin_top  =
+        av_rescale((style->alignment >= 7) ? style->margin_v : 0,
+                   100, script_info.play_res_x);
+}
+
+static void ttml_get_extent(ASSScriptInfo script_info, ASSStyle *style,
+                           int *width, int *height)
+{
+    *width  = av_rescale(script_info.play_res_x - style->margin_r,
+                         100, script_info.play_res_x);
+    *height = av_rescale((style->alignment <= 3) ?
+                         script_info.play_res_y - style->margin_v :
+                         script_info.play_res_y,
+                         100, script_info.play_res_y);
+}
+
 // if we set cell resolution to our script reference resolution,
 // then a single line is a single "point" on our canvas. Thus, by setting our
 // font size to font size in cells, we should gain a similar enough scale
@@ -261,6 +281,8 @@ static const char *ttml_get_text_alignment(int alignment)
 // upon in the TTML community.
 static const char ttml_region_base[] =
 "      <region xml:id=\"%s\"\n"
+"        tts:origin=\"%d%% %d%%\"\n"
+"        tts:extent=\"%d%% %d%%\"\n"
 "        tts:displayAlign=\"%s\"\n"
 "        tts:textAlign=\"%s\"\n"
 "        tts:fontSize=\"%dc\"\n";
@@ -272,7 +294,7 @@ static const char ttml_region_footer[] =
 "        tts:overflow=\"visible\" />\n";
 
 static int ttml_write_region(AVCodecContext *avctx, AVBPrint *buf,
-                             ASSStyle *style)
+                             ASSScriptInfo script_info, ASSStyle *style)
 {
     if (!style)
         return AVERROR_INVALIDDATA;
@@ -288,11 +310,23 @@ static int ttml_write_region(AVCodecContext *avctx, AVBPrint *buf,
         return AVERROR_INVALIDDATA;
     }
 
+    if (style->margin_l < 0 || style->margin_r < 0 || style->margin_v < 0) {
+        av_log(avctx, AV_LOG_ERROR,
+               "One or more negative margin values in subtitle style: "
+               "left: %d, right: %d, vertical: %d!\n",
+               style->margin_l, style->margin_r, style->margin_v);
+        return AVERROR_INVALIDDATA;
+    }
+
     {
         const char *display_alignment =
             ttml_get_display_alignment(style->alignment);
         const char *text_alignment =
             ttml_get_text_alignment(style->alignment);
+        int origin_left = 0;
+        int origin_top  = 0;
+        int width = 0;
+        int height = 0;
         char *style_name = NULL;
         char *font_name = NULL;
         AVBPrint local_bprint = { 0 };
@@ -307,6 +341,9 @@ static int ttml_write_region(AVCodecContext *avctx, AVBPrint *buf,
             return AVERROR_INVALIDDATA;
         }
 
+        ttml_get_origin(script_info, style, &origin_left, &origin_top);
+        ttml_get_extent(script_info, style, &width, &height);
+
         av_bprint_init(&local_bprint, 0, AV_BPRINT_SIZE_UNLIMITED);
         av_bprint_escape(&local_bprint, style->name, NULL,
                          AV_ESCAPE_MODE_XML, AV_ESCAPE_FLAG_XML_DOUBLE_QUOTES);
@@ -318,6 +355,7 @@ static int ttml_write_region(AVCodecContext *avctx, AVBPrint *buf,
             return ret;
 
         av_bprintf(buf, ttml_region_base, style_name,
+                   origin_left, origin_top, width, height,
                    display_alignment, text_alignment, style->font_size);
 
         if (style->font_name) {
@@ -383,7 +421,7 @@ static int ttml_write_header_content(AVCodecContext *avctx)
         int ret = AVERROR_BUG;
         style = &ass->styles[i];
 
-        if ((ret = ttml_write_region(avctx, &s->buffer, style)) < 0)
+        if ((ret = ttml_write_region(avctx, &s->buffer, script_info, style)) < 0)
             return ret;
     }
 
