@@ -2454,3 +2454,8 @@ struct SwsContext *sws_getCachedContext(struct SwsContext *context, int srcW,
     }
     return context;
 }
+
+int sws_has_colorspace_changed(const struct SwsContext *c)
+{
+    return c->has_changed_colorspace;
+}

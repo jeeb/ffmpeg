@@ -330,6 +330,16 @@ void sws_convertPalette8ToPacked24(const uint8_t *src, uint8_t *dst, int num_pix
 const AVClass *sws_get_class(void);
 
 /**
+  * Get information whether there has been any change in actual color space.
+  * Example of cases where this would not be true are:
+  * - Only scaling
+  * - Only doing a bit depth conversion
+  * - Only doing a range conversion
+  * - Only changing the chroma subsampling
+  */
+int sws_has_colorspace_changed(const struct SwsContext *c);
+
+/**
  * @}
  */
 

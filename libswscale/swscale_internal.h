@@ -626,6 +626,16 @@ typedef struct SwsContext {
     SwsDither dither;
 
     SwsAlphaBlend alphablend;
+
+    /**
+      * Set if there has been any change in actual color space. Example of
+      * cases where this would not be true are:
+      * - Only scaling
+      * - Only doing a bit depth conversion
+      * - Only doing a range conversion
+      * - Only changing the chroma subsampling
+      */
+    int has_changed_colorspace;
 } SwsContext;
 //FIXME check init (where 0)
 

@@ -2009,6 +2009,7 @@ void ff_get_unscaled_swscale(SwsContext *c)
          srcFormat == AV_PIX_FMT_YUVA420P) && isAnyRGB(dstFormat) &&
         !(flags & SWS_ACCURATE_RND) && (c->dither == SWS_DITHER_BAYER || c->dither == SWS_DITHER_AUTO) && !(dstH & 1)) {
         c->swscale = ff_yuv2rgb_get_func_ptr(c);
+        c->has_changed_colorspace = 1;
     }
     /* yuv420p1x_to_p01x */
     if ((srcFormat == AV_PIX_FMT_YUV420P10 || srcFormat == AV_PIX_FMT_YUVA420P10 ||
@@ -2033,8 +2034,10 @@ void ff_get_unscaled_swscale(SwsContext *c)
     /* bgr24toYV12 */
     if (srcFormat == AV_PIX_FMT_BGR24 &&
         (dstFormat == AV_PIX_FMT_YUV420P || dstFormat == AV_PIX_FMT_YUVA420P) &&
-        !(flags & SWS_ACCURATE_RND))
+        !(flags & SWS_ACCURATE_RND)) {
         c->swscale = bgr24ToYv12Wrapper;
+        c->has_changed_colorspace = 1;
+    }
 
     /* RGB/BGR -> RGB/BGR (no dither needed forms) */
     if (isAnyRGB(srcFormat) && isAnyRGB(dstFormat) && findRgbConvFn(c)
@@ -2103,6 +2106,9 @@ void ff_get_unscaled_swscale(SwsContext *c)
             av_log(c, AV_LOG_ERROR, "unsupported bayer conversion\n");
             av_assert0(0);
         }
+
+        if (!isBayer(dstFormat))
+            c->has_changed_colorspace = 1;
     }
 
     /* bswap 16 bits per pixel/component packed formats */
