@@ -738,6 +738,15 @@ scale:
     av_frame_copy_props(out, in);
     out->width  = outlink->w;
     out->height = outlink->h;
+    if (sws_has_colorspace_changed(scale->sws)) {
+        // av_frame_copy_props unconditionally copies everything,
+        // so until we get more complex logic on board, if we have
+        // changed the color space, reset all main values.
+        out->color_primaries = AVCOL_PRI_UNSPECIFIED;
+        out->color_trc       = AVCOL_TRC_UNSPECIFIED;
+        out->colorspace      = AVCOL_SPC_UNSPECIFIED;
+        out->chroma_location = AVCHROMA_LOC_UNSPECIFIED;
+    }
 
     if (scale->output_is_pal)
         avpriv_set_systematic_pal2((uint32_t*)out->data[1], outlink->format == AV_PIX_FMT_PAL8 ? AV_PIX_FMT_BGR8 : outlink->format);
