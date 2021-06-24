@@ -648,6 +648,22 @@ static int scale_slice(AVFilterLink *link, AVFrame *out_buf, AVFrame *cur_pic, s
                          out,out_stride);
 }
 
+
+static unsigned int color_space_needs_reset(AVFrame *in, AVFrame *out)
+{
+    const AVPixFmtDescriptor *out_desc = av_pix_fmt_desc_get(out->format);
+
+    if (in->format == out->format)
+        return 0;
+
+    if (out->colorspace == AVCOL_SPC_RGB &&
+        (out_desc->flags & AV_PIX_FMT_FLAG_RGB))
+        return 0;
+
+    return 1;
+}
+
+
 static int scale_frame(AVFilterLink *link, AVFrame *in, AVFrame **frame_out)
 {
     AVFilterContext *ctx = link->dst;
@@ -739,6 +755,9 @@ scale:
     av_frame_copy_props(out, in);
     out->width  = outlink->w;
     out->height = outlink->h;
+
+    if (color_space_needs_reset(in, out))
+        out->colorspace = AVCOL_SPC_UNSPECIFIED;
 
     if (scale->output_is_pal)
         avpriv_set_systematic_pal2((uint32_t*)out->data[1], outlink->format == AV_PIX_FMT_PAL8 ? AV_PIX_FMT_BGR8 : outlink->format);
