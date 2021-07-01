@@ -975,6 +975,9 @@ static const enum AVPixelFormat pix_fmts_8bit[] = {
     AV_PIX_FMT_YUVJ422P,
     AV_PIX_FMT_YUV444P,
     AV_PIX_FMT_YUVJ444P,
+    AV_PIX_FMT_BGR0,
+    AV_PIX_FMT_BGR24,
+    AV_PIX_FMT_RGB24,
     AV_PIX_FMT_NV12,
     AV_PIX_FMT_NV16,
 #ifdef X264_CSP_NV21
@@ -1001,6 +1004,9 @@ static const enum AVPixelFormat pix_fmts_all[] = {
     AV_PIX_FMT_YUVJ422P,
     AV_PIX_FMT_YUV444P,
     AV_PIX_FMT_YUVJ444P,
+    AV_PIX_FMT_BGR0,
+    AV_PIX_FMT_BGR24,
+    AV_PIX_FMT_RGB24,
     AV_PIX_FMT_NV12,
     AV_PIX_FMT_NV16,
 #ifdef X264_CSP_NV21
@@ -1016,14 +1022,6 @@ static const enum AVPixelFormat pix_fmts_all[] = {
 #endif
     AV_PIX_FMT_NONE
 };
-#if CONFIG_LIBX264RGB_ENCODER
-static const enum AVPixelFormat pix_fmts_8bit_rgb[] = {
-    AV_PIX_FMT_BGR0,
-    AV_PIX_FMT_BGR24,
-    AV_PIX_FMT_RGB24,
-    AV_PIX_FMT_NONE
-};
-#endif
 
 #if X264_BUILD < 153
 static av_cold void X264_init_static(AVCodec *codec)
@@ -1183,38 +1181,6 @@ AVCodec ff_libx264_encoder = {
 #endif
                       ,
     .wrapper_name     = "libx264",
-};
-#endif
-
-#if CONFIG_LIBX264RGB_ENCODER
-static const AVClass rgbclass = {
-    .class_name = "libx264rgb",
-    .item_name  = av_default_item_name,
-    .option     = options,
-    .version    = LIBAVUTIL_VERSION_INT,
-};
-
-const AVCodec ff_libx264rgb_encoder = {
-    .name           = "libx264rgb",
-    .long_name      = NULL_IF_CONFIG_SMALL("libx264 H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10 RGB"),
-    .type           = AVMEDIA_TYPE_VIDEO,
-    .id             = AV_CODEC_ID_H264,
-    .capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY |
-                      AV_CODEC_CAP_OTHER_THREADS |
-                      AV_CODEC_CAP_ENCODER_REORDERED_OPAQUE,
-    .priv_data_size = sizeof(X264Context),
-    .init           = X264_init,
-    .encode2        = X264_frame,
-    .close          = X264_close,
-    .priv_class     = &rgbclass,
-    .defaults       = x264_defaults,
-    .pix_fmts       = pix_fmts_8bit_rgb,
-    .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP | FF_CODEC_CAP_AUTO_THREADS
-#if X264_BUILD >= 158
-                      | FF_CODEC_CAP_INIT_THREADSAFE
-#endif
-                      ,
-    .wrapper_name   = "libx264",
 };
 #endif
 

@@ -2280,7 +2280,7 @@ Text-like
 
 @end table
 
-@section libx264, libx264rgb
+@section libx264
 
 x264 H.264/MPEG-4 AVC encoder wrapper.
 
@@ -2302,8 +2302,9 @@ by the libx264 @code{x264_param_parse} function.
 The x264 project website is at
 @url{http://www.videolan.org/developers/x264.html}.
 
-The libx264rgb encoder is the same as libx264, except it accepts packed RGB
-pixel formats as input instead of YUV.
+Since libavcodec 59.4.100 the libx264 encoder wrapper now supports both
+YCbCr as well as packed RGB pixel formats, and the separate libx264rgb
+wrapper has been removed.
 
 @subsection Supported Pixel Formats
 
