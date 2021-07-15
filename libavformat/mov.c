@@ -28,6 +28,7 @@
 #include <stdint.h>
 
 #include "libavutil/attributes.h"
+#include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/internal.h"
 #include "libavutil/intreadwrite.h"
@@ -6835,6 +6836,71 @@ static int mov_read_dvcc_dvvc(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     return 0;
 }
 
+static int mov_read_kind(MOVContext *c, AVIOContext *pb, MOVAtom atom)
+{
+    AVFormatContext *ctx = c->fc;
+    AVStream *st = NULL;
+    char scheme_str[1024] = { 0 }, value_str[1024] = { 0 };
+    int scheme_str_len = 0, value_str_len = 0;
+    int version, flags;
+    int64_t size = atom.size;
+
+    if (atom.size < 6)
+        // 4 bytes for version + flags, 2x 1 byte for null
+        return AVERROR_INVALIDDATA;
+
+    if (c->fc->nb_streams < 1)
+        return 0;
+    st = c->fc->streams[c->fc->nb_streams-1];
+
+    version = avio_r8(pb);
+    flags   = avio_rb24(pb);
+    size   -= 4;
+
+    if (version != 0 || flags != 0) {
+        av_log(ctx, AV_LOG_ERROR,
+               "Unsupported 'kind' box with version %d, flags: %x",
+               version, flags);
+        return AVERROR_INVALIDDATA;
+    }
+
+    scheme_str_len = avio_get_str(pb, size, scheme_str, sizeof(scheme_str));
+    if (scheme_str_len < 0)
+        return AVERROR_INVALIDDATA;
+
+    if (scheme_str_len == size)
+        // we need to have another string, even if nullptr
+        return AVERROR_INVALIDDATA;
+
+    size -= scheme_str_len;
+
+    value_str_len = avio_get_str(pb, size, value_str, sizeof(value_str));
+    if (value_str_len < 0)
+        return AVERROR_INVALIDDATA;
+
+    av_log(ctx, AV_LOG_TRACE,
+           "%s stream %d KindBox(scheme: %s, value: %s)\n",
+           av_get_media_type_string(st->codecpar->codec_type),
+           st->index,
+           scheme_str, value_str);
+
+    for (int i = 0; ff_mov_track_kind_table[i].scheme_uri; i++) {
+        const struct MP4TrackKindMapping map = ff_mov_track_kind_table[i];
+        if (!av_strstart(scheme_str, map.scheme_uri, NULL))
+            continue;
+
+        for (int j = 0; map.value_maps[j].disposition; j++) {
+            const struct MP4TrackKindValueMapping value_map = map.value_maps[j];
+            if (!av_strstart(value_str, value_map.value, NULL))
+                continue;
+
+            st->disposition |= value_map.disposition;
+        }
+    }
+
+    return 0;
+}
+
 static const MOVParseTableEntry mov_default_parse_table[] = {
 { MKTAG('A','C','L','R'), mov_read_aclr },
 { MKTAG('A','P','R','G'), mov_read_avid },
@@ -6932,6 +6998,7 @@ static const MOVParseTableEntry mov_default_parse_table[] = {
 { MKTAG('c','l','l','i'), mov_read_clli },
 { MKTAG('d','v','c','C'), mov_read_dvcc_dvvc },
 { MKTAG('d','v','v','C'), mov_read_dvcc_dvvc },
+{ MKTAG('k','i','n','d'), mov_read_kind },
 { 0, NULL }
 };
 
