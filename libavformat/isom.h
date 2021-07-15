@@ -387,4 +387,16 @@ static inline enum AVCodecID ff_mov_get_lpcm_codec_id(int bps, int flags)
     return ff_get_pcm_codec_id(bps, flags & 1, flags & 2, flags & 4 ? -1 : 0);
 }
 
+struct MP4TrackKindValueMapping {
+    int         disposition;
+    const char *value;
+};
+
+struct MP4TrackKindMapping {
+    const char   *scheme_uri;
+    const struct  MP4TrackKindValueMapping *value_maps;
+};
+
+extern const struct MP4TrackKindMapping ff_mov_track_kind_table[];
+
 #endif /* AVFORMAT_ISOM_H */

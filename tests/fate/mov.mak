@@ -132,6 +132,14 @@ FATE_MOV_FFMPEG_FFPROBE-$(call ALLYES, FILE_PROTOCOL MOV_DEMUXER MJPEG_DECODER \
                           += fate-mov-cover-image
 fate-mov-cover-image: CMD = transcode mov $(TARGET_SAMPLES)/cover_art/Owner-iTunes_9.0.3.15.m4a mp4 "-map 0 -map 0:v -c:a copy -c:v:0 copy -filter:v:1 scale -c:v:1 png" "-map 0 -t 0.1 -c copy" "" "-show_entries stream_disposition=attached_pic:stream=index,codec_name"
 
+# Resulting remux should have:
+# 1. first audio stream with AV_DISPOSITION_HEARING_IMPAIRED
+# 2. second audio stream with AV_DISPOSITION_VISUAL_IMPAIRED | DESCRIPTIONS
+FATE_MOV_FFMPEG_FFPROBE-$(call ALLYES, FILE_PROTOCOL PIPE_PROTOCOL \
+                                       MPEGTS_DEMUXER MOV_DEMUXER AC3_DECODER \
+                                       MP4_MUXER FRAMECRC_MUXER ) \
+                          += fate-mov-mp4-disposition-mpegts-remux
+fate-mov-mp4-disposition-mpegts-remux: CMD = transcode mpegts $(TARGET_SAMPLES)/mpegts/pmtchange.ts mp4 "-map 0:1 -map 0:2 -c copy -disposition:a:0 +hearing_impaired" "-map 0 -c copy" "" "-of json -show_entries stream_disposition:stream=index"
 FATE_SAMPLES_FFMPEG_FFPROBE += $(FATE_MOV_FFMPEG_FFPROBE-yes)
 
 fate-mov: $(FATE_MOV) $(FATE_MOV_FFPROBE) $(FATE_MOV_FASTSTART) $(FATE_MOV_FFMPEG_FFPROBE-yes)
