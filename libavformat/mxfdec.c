@@ -2688,7 +2688,8 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
             if (ret < 0)
                 return ret;
         }
-        if (st->codecpar->codec_type != AVMEDIA_TYPE_DATA && source_track->wrapping != FrameWrapped) {
+        if (st->codecpar->codec_type != AVMEDIA_TYPE_DATA && source_track->wrapping != FrameWrapped &&
+            st->codecpar->codec_id != AV_CODEC_ID_JPEG2000) {
             /* TODO: decode timestamps */
             st->internal->need_parsing = AVSTREAM_PARSE_TIMESTAMPS;
         }
