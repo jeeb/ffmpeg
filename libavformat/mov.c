@@ -291,6 +291,111 @@ static int mov_metadata_hmmt(MOVContext *c, AVIOContext *pb, unsigned len)
     return 0;
 }
 
+// 3GPP TS 26.244, 8.2 3GPP asset meta data
+static int mov_metadata_titl(MOVContext *c, AVIOContext *pb, unsigned len)
+{
+    AVFormatContext *s = c->fc;
+    int version = -1, ret = AVERROR_BUG;
+    unsigned left_bytes = len, langcode = 0, flags = 100, bom = 0, buf_size = 0;
+    char language[4] = { 0 };
+    AVStream *st = NULL;
+    char *title_buf = NULL;
+    const char key[] = "title";
+
+    // 4 byte FullBox header, 2 byte lang. code, at least 1 byte for string
+    if (len < 4 + 2 + 1) {
+        av_log(s, AV_LOG_ERROR, "3GPP titl box too short!\n");
+        return AVERROR_INVALIDDATA;
+    }
+
+    if (s->nb_streams >= 1)
+        st = s->streams[s->nb_streams-1];
+
+    // FullBox header
+    version = avio_r8(pb);
+    flags   = avio_rb24(pb);
+    left_bytes -= 4;
+
+    if (version != 0 || flags != 0) {
+        av_log(s, AV_LOG_ERROR,
+               "Invalid nonzero version (%d) or flags (%x) for 3GPP titl!\n",
+               version, flags);
+        return AVERROR_INVALIDDATA;
+    }
+
+    langcode = avio_rb16(pb) & ~(1 << 15);
+    if ((ret = ff_mov_lang_to_iso639(langcode, language)) < 0) {
+        av_log(s, AV_LOG_ERROR,
+               "Failed to parse 3GPP titl language code %x: %s!\n",
+               langcode, av_err2str(ret));
+        return ret;
+    }
+
+    left_bytes -= 2;
+
+    if (left_bytes <= 1)
+        // no contents (just null)
+        return 0;
+
+    buf_size = left_bytes + 1;
+    if (!(title_buf = av_mallocz(buf_size))) {
+        av_log(s, AV_LOG_ERROR,
+               "Could not allocate buffer of length %u for parsed 3GPP titl "
+               "title string!\n",
+               left_bytes);
+        return AVERROR(ENOMEM);
+    }
+
+    bom = avio_rb16(pb);
+    left_bytes -= 2;
+
+    if (bom == 0xfeff)
+        avio_get_str16be(pb, left_bytes, title_buf, buf_size);
+    else if (bom == 0xfffe)
+        avio_get_str16le(pb, left_bytes, title_buf, buf_size);
+    else {
+        AV_WB16(title_buf, bom);
+        if (!left_bytes)
+            title_buf[2] = 0;
+        else
+            avio_get_str(pb, left_bytes, title_buf + 2, buf_size - 2);
+    }
+
+    av_log(s, AV_LOG_TRACE, "%s TitlBox(lang: %s, title: %s)\n",
+           st ? "track" : "media",
+           language, title_buf);
+
+    s->event_flags |= AVFMT_EVENT_FLAG_METADATA_UPDATED;
+
+    if (*language && strcmp(language, "und")) {
+        char lang_key[sizeof(key) + 1 + sizeof(language)] = { 0 };
+        snprintf(lang_key, sizeof(lang_key), "%s-%s", key, language);
+
+        if ((ret = av_dict_set(st ? &st->metadata : &s->metadata,
+                               lang_key, title_buf, 0)) < 0) {
+            av_log(s, AV_LOG_ERROR,
+                   "Failed to set %s metadata key %s to value %s: %s!\n",
+                   st ? "track" : "media",
+                   lang_key, title_buf,
+                   av_err2str(ret));
+            goto cleanup;
+        }
+    }
+
+    ret = av_dict_set(st ? &st->metadata : &s->metadata, key, title_buf, 0);
+    if (ret < 0)
+        av_log(s, AV_LOG_ERROR,
+               "Failed to set %s metadata key %s to value %s: %s!\n",
+               st ? "track" : "media",
+               key, title_buf,
+               av_err2str(ret));
+
+cleanup:
+    av_freep(&title_buf);
+
+    return ret;
+}
+
 static int mov_read_udta_string(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
     char tmp_key[AV_FOURCC_MAX_STRING_SIZE] = {0};
@@ -349,6 +454,8 @@ static int mov_read_udta_string(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     case MKTAG( 's','o','s','n'): key = "sort_show";    break;
     case MKTAG( 's','t','i','k'): key = "media_type";
         parse = mov_metadata_int8_no_padding; break;
+    case MKTAG( 't','i','t','l'):
+        return mov_metadata_titl(c, pb, atom.size);
     case MKTAG( 't','r','k','n'): key = "track";
         parse = mov_metadata_track_or_disc_number; break;
     case MKTAG( 't','v','e','n'): key = "episode_id"; break;
