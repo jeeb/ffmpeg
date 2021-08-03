@@ -296,7 +296,8 @@ static int mov_metadata_titl(MOVContext *c, AVIOContext *pb, unsigned len)
 {
     AVFormatContext *s = c->fc;
     int version = -1, ret = AVERROR_BUG;
-    unsigned left_bytes = len, langcode = 0, flags = 100, bom = 0, buf_size = 0;
+    unsigned left_bytes = len, langcode = 0, flags = 100, bom = 0;
+    size_t buf_size = 0;
     char language[4] = { 0 };
     AVStream *st = NULL;
     char *title_buf = NULL;
@@ -337,17 +338,29 @@ static int mov_metadata_titl(MOVContext *c, AVIOContext *pb, unsigned len)
         // no contents (just null)
         return 0;
 
-    buf_size = left_bytes + 1;
-    if (!(title_buf = av_mallocz(buf_size))) {
-        av_log(s, AV_LOG_ERROR,
-               "Could not allocate buffer of length %u for parsed 3GPP titl "
-               "title string!\n",
-               left_bytes);
-        return AVERROR(ENOMEM);
-    }
-
     bom = avio_rb16(pb);
     left_bytes -= 2;
+
+    switch (bom) {
+    case 0xfeff:
+    case 0xfffe:
+        // double the buffer size to fit values which end up larger in UTF-8
+        // than in UTF-16.
+        buf_size = (2*left_bytes) + 1;
+        break;
+    default:
+        // if this was not a UTF-16 bom, put the two extra bytes back into
+        // the buffer size.
+        buf_size = (left_bytes + 2) + 1;
+    }
+
+    if (!(title_buf = av_mallocz(buf_size))) {
+        av_log(s, AV_LOG_ERROR,
+               "Could not allocate buffer of length %zu for parsed 3GPP titl "
+               "title string!\n",
+               buf_size);
+        return AVERROR(ENOMEM);
+    }
 
     if (bom == 0xfeff)
         avio_get_str16be(pb, left_bytes, title_buf, buf_size);
@@ -367,33 +380,25 @@ static int mov_metadata_titl(MOVContext *c, AVIOContext *pb, unsigned len)
 
     s->event_flags |= AVFMT_EVENT_FLAG_METADATA_UPDATED;
 
-    if (*language && strcmp(language, "und")) {
-        char lang_key[sizeof(key) + 1 + sizeof(language)] = { 0 };
+    ret = av_dict_set(st ? &st->metadata : &s->metadata, key, title_buf,
+                      AV_DICT_DONT_STRDUP_VAL);
+    if (ret < 0)
+        // string value string gets freed by av_dict_set due to flag
+        return ret;
+
+    if (!*language || !strcmp(language, "und"))
+        return 0;
+
+    {
+        // both sizeofs include the trailing null, thus leading to two
+        // additional bytes being available, which fit both the dash as well
+        // as the trailing null.
+        char lang_key[sizeof(key) + sizeof(language)];
         snprintf(lang_key, sizeof(lang_key), "%s-%s", key, language);
 
-        if ((ret = av_dict_set(st ? &st->metadata : &s->metadata,
-                               lang_key, title_buf, 0)) < 0) {
-            av_log(s, AV_LOG_ERROR,
-                   "Failed to set %s metadata key %s to value %s: %s!\n",
-                   st ? "track" : "media",
-                   lang_key, title_buf,
-                   av_err2str(ret));
-            goto cleanup;
-        }
+        return av_dict_set(st ? &st->metadata : &s->metadata,
+                           lang_key, title_buf, 0);
     }
-
-    ret = av_dict_set(st ? &st->metadata : &s->metadata, key, title_buf, 0);
-    if (ret < 0)
-        av_log(s, AV_LOG_ERROR,
-               "Failed to set %s metadata key %s to value %s: %s!\n",
-               st ? "track" : "media",
-               key, title_buf,
-               av_err2str(ret));
-
-cleanup:
-    av_freep(&title_buf);
-
-    return ret;
 }
 
 static int mov_read_udta_string(MOVContext *c, AVIOContext *pb, MOVAtom atom)
