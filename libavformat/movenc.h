@@ -25,6 +25,7 @@
 #define AVFORMAT_MOVENC_H
 
 #include "avformat.h"
+#include "isom.h"
 #include "movenccenc.h"
 #include "libavcodec/packet_internal.h"
 
@@ -242,6 +243,7 @@ typedef struct MOVMuxContext {
     MOVPrftBox write_prft;
     int empty_hdlr_name;
     int movie_timescale;
+    enum MP4TrackKindWritingMode kind_writing_mode;
 } MOVMuxContext;
 
 #define FF_MOV_FLAG_RTP_HINT              (1 <<  0)
