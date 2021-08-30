@@ -433,19 +433,32 @@ void ff_mov_write_chan(AVIOContext *pb, int64_t channel_layout)
 
 static const struct MP4TrackKindValueMapping dash_role_map[] = {
     { AV_DISPOSITION_HEARING_IMPAIRED|AV_DISPOSITION_CAPTIONS,
-        "caption" },
+        "caption",
+        KindWritingModeCMAF | KindWritingModeUnifiedOrigin },
     { AV_DISPOSITION_COMMENT,
-        "commentary" },
+        "commentary",
+        KindWritingModeCMAF | KindWritingModeUnifiedOrigin },
     { AV_DISPOSITION_VISUAL_IMPAIRED|AV_DISPOSITION_DESCRIPTIONS,
-        "description" },
+        "description",
+        KindWritingModeCMAF },
     { AV_DISPOSITION_DUB,
-        "dub" },
+        "dub",
+        KindWritingModeCMAF | KindWritingModeUnifiedOrigin },
     { AV_DISPOSITION_FORCED,
-        "forced-subtitle" },
+        "forced-subtitle",
+        KindWritingModeCMAF | KindWritingModeUnifiedOrigin },
+    { 0, NULL }
+};
+
+static const struct MP4TrackKindValueMapping html_kind_map[] = {
+    { AV_DISPOSITION_VISUAL_IMPAIRED|AV_DISPOSITION_DESCRIPTIONS,
+        "main-desc",
+         KindWritingModeUnifiedOrigin },
     { 0, NULL }
 };
 
 const struct MP4TrackKindMapping ff_mov_track_kind_table[] = {
     { "urn:mpeg:dash:role:2011", dash_role_map },
+    { "about:html-kind",         html_kind_map },
     { 0, NULL }
 };

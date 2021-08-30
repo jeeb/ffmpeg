@@ -145,6 +145,14 @@ FATE_MOV_FFMPEG_FFPROBE-$(call ALLYES, FILE_PROTOCOL PIPE_PROTOCOL \
                           += fate-mov-mp4-disposition-mpegts-remux
 fate-mov-mp4-disposition-mpegts-remux: CMD = transcode mpegts $(TARGET_SAMPLES)/mpegts/pmtchange.ts mp4 "-map 0:1 -map 0:2 -c copy -disposition:a:0 +hearing_impaired" "-map 0 -c copy" "" "-of json -show_entries stream_disposition:stream=index"
 
+# Same as the previous test, but the audio disposition should now be tagged
+# with the HTML5 media track identifier as opposed to the DASH identifier.
+FATE_MOV_FFMPEG_FFPROBE-$(call ALLYES, FILE_PROTOCOL PIPE_PROTOCOL \
+                                       MPEGTS_DEMUXER MOV_DEMUXER AC3_DECODER \
+                                       MP4_MUXER FRAMECRC_MUXER ) \
+                          += fate-mov-mp4-disposition-unified-origin-mpegts-remux
+fate-mov-mp4-disposition-unified-origin-mpegts-remux: CMD = transcode mpegts $(TARGET_SAMPLES)/mpegts/pmtchange.ts mp4 "-map 0:1 -map 0:2 -c copy -disposition:a:0 +hearing_impaired -kind_writing_mode unified_origin" "-map 0 -c copy" "" "-of json -show_entries stream_disposition:stream=index"
+
 FATE_SAMPLES_FFMPEG_FFPROBE += $(FATE_MOV_FFMPEG_FFPROBE-yes)
 
 fate-mov: $(FATE_MOV) $(FATE_MOV_FFPROBE) $(FATE_MOV_FASTSTART) $(FATE_MOV_FFMPEG_FFPROBE-yes)

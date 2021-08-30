@@ -111,6 +111,9 @@ static const AVOption options[] = {
     { "pts", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = MOV_PRFT_SRC_PTS}, 0, 0, AV_OPT_FLAG_ENCODING_PARAM, "prft"},
     { "empty_hdlr_name", "write zero-length name string in hdlr atoms within mdia and minf atoms", offsetof(MOVMuxContext, empty_hdlr_name), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, AV_OPT_FLAG_ENCODING_PARAM},
     { "movie_timescale", "set movie timescale", offsetof(MOVMuxContext, movie_timescale), AV_OPT_TYPE_INT, {.i64 = MOV_TIMESCALE}, 1, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM},
+    { "kind_writing_mode", "set kind box writing mode", offsetof(MOVMuxContext, kind_writing_mode), AV_OPT_TYPE_INT, {.i64 = KindWritingModeCMAF}, KindWritingModeCMAF, KindWritingModeNB - 1, AV_OPT_FLAG_ENCODING_PARAM, "kind_writing_mode"},
+        { "cmaf", "CMAF writing mode", 0, AV_OPT_TYPE_CONST, {.i64 = KindWritingModeCMAF}, INT_MIN, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM, "kind_writing_mode"},
+        { "unified_origin", "Compatibility mode for Unified Origin (all DASH except for audio description)", 0, AV_OPT_TYPE_CONST, {.i64 = KindWritingModeUnifiedOrigin}, INT_MIN, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM, "kind_writing_mode"},
     { NULL },
 };
 
@@ -3355,7 +3358,8 @@ static int mov_write_track_kind(AVIOContext *pb, const char *scheme_uri,
     return update_size(pb, pos);
 }
 
-static int mov_write_track_kinds(AVIOContext *pb, AVStream *st)
+static int mov_write_track_kinds(AVIOContext *pb, AVStream *st,
+                                 enum MP4TrackKindWritingMode mode)
 {
     int ret = AVERROR_BUG;
 
@@ -3364,7 +3368,8 @@ static int mov_write_track_kinds(AVIOContext *pb, AVStream *st)
 
         for (int j = 0; map.value_maps[j].disposition; j++) {
             const struct MP4TrackKindValueMapping value_map = map.value_maps[j];
-            if (!(st->disposition & value_map.disposition))
+            if (!(st->disposition & value_map.disposition) ||
+                !(value_map.writing_modes & mode))
                 continue;
 
             if ((ret = mov_write_track_kind(pb, map.scheme_uri, value_map.value)) < 0)
@@ -3393,7 +3398,8 @@ static int mov_write_track_udta_tag(AVIOContext *pb, MOVMuxContext *mov,
         mov_write_track_metadata(pb_buf, st, "name", "title");
 
     if (mov->mode & MODE_MP4) {
-        if ((ret = mov_write_track_kinds(pb_buf, st)) < 0)
+        if ((ret = mov_write_track_kinds(pb_buf, st,
+                                         mov->kind_writing_mode)) < 0)
             return ret;
     }
 
