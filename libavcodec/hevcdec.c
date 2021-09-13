@@ -571,7 +571,8 @@ static int hls_slice_header(HEVCContext *s)
         return AVERROR_INVALIDDATA;
     }
     s->ps.pps = (HEVCPPS*)s->ps.pps_list[sh->pps_id]->data;
-    if (s->nal_unit_type == HEVC_NAL_CRA_NUT && s->last_eos == 1)
+    if (s->nal_unit_type == HEVC_NAL_CRA_NUT &&
+        (s->last_eos == 1 || !s->first_irap_found))
         sh->no_output_of_prior_pics_flag = 1;
 
     if (s->ps.sps != (HEVCSPS*)s->ps.sps_list[s->ps.pps->sps_id]->data) {
@@ -2966,7 +2967,11 @@ static int hevc_frame_start(HEVCContext *s)
     s->is_decoded        = 0;
     s->first_nal_type    = s->nal_unit_type;
 
-    s->no_rasl_output_flag = IS_IDR(s) || IS_BLA(s) || (s->nal_unit_type == HEVC_NAL_CRA_NUT && s->last_eos);
+    s->no_rasl_output_flag = IS_IDR(s) || IS_BLA(s) ||
+                             (s->nal_unit_type == HEVC_NAL_CRA_NUT && (s->last_eos || !s->first_irap_found));
+
+    if (!s->first_irap_found)
+        s->first_irap_found = IS_IRAP(s);
 
     if (s->ps.pps->tiles_enabled_flag)
         lc->end_of_tiles_x = s->ps.pps->column_width[0] << s->ps.sps->log2_ctb_size;
@@ -3606,6 +3611,7 @@ static int hevc_update_thread_context(AVCodecContext *dst,
     s->max_ra     = s0->max_ra;
     s->eos        = s0->eos;
     s->no_rasl_output_flag = s0->no_rasl_output_flag;
+    s->first_irap_found = s0->first_irap_found;
 
     s->is_nalff        = s0->is_nalff;
     s->nal_length_size = s0->nal_length_size;
