@@ -13,5 +13,18 @@ fate-truehd-core-bsf: CMD = md5pipe -i $(TARGET_SAMPLES)/truehd/atmos.thd -c:a c
 fate-truehd-core-bsf: CMP = oneline
 fate-truehd-core-bsf: REF = 3aa5d0c7825051f3657b71fd6135183b
 
+# Tests that the result from reading a copyinkf remux with the first random
+# access point dropped will receive the correct timestamp for the first packet,
+# which is not the packet of the first packet read.
+FATE_TRUEHD-$(call ALLYES, FILE_PROTOCOL PIPE_PROTOCOL TRUEHD_DEMUXER \
+                           MATROSKA_DEMUXER MLP_PARSER MATROSKA_MUXER \
+                           NOISE_BSF) \
+                           += fate-truehd-parser-timestamps
+fate-truehd-parser-timestamps: CMD = stream_remux "truehd" \
+    "$(TARGET_SAMPLES)/lossless-audio/truehd_5.1.raw" "matroska" \
+    "-map 0:a -copyinkf -bsf:a noise=drop=not\(n\)*key -t 0.030" \
+    "-c copy -copyts"
+fate-truehd-parser-timestamps: CMP = diff
+
 FATE_SAMPLES_AUDIO += $(FATE_TRUEHD-yes)
 fate-truehd: $(FATE_TRUEHD-yes)

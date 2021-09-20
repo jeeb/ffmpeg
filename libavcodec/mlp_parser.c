@@ -96,6 +96,7 @@ static int mlp_parse(AVCodecParserContext *s,
                 return ret;
             }
 
+            s->fetch_timestamp = 1;
             return i - 7;
         }
 
