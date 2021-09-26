@@ -572,6 +572,7 @@ static void fill_buffer(AVIOContext *s)
         s->buf_ptr = dst;
         s->buf_end = dst + len;
         ffiocontext(s)->bytes_read += len;
+        s->bytes_read = ffiocontext(s)->bytes_read;
     }
 }
 
@@ -645,6 +646,7 @@ int avio_read(AVIOContext *s, unsigned char *buf, int size)
                 } else {
                     s->pos += len;
                     ffiocontext(s)->bytes_read += len;
+                    s->bytes_read = ffiocontext(s)->bytes_read;
                     size -= len;
                     buf += len;
                     // reset the buffer
