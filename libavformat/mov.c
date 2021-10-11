@@ -462,6 +462,11 @@ retry:
     if (parse)
         parse(c, pb, str_size, key);
     else {
+        AVFormatContext *s = c->fc;
+        AVStream *st = s->nb_streams > 0 ?
+                       s->streams[s->nb_streams-1] : NULL;
+        AVDictionary *metadata = st ? st->metadata : s->metadata;
+
         if (!raw && (data_type == 3 || (data_type == 0 && (langcode < 0x400 || langcode == 0x7fff)))) { // MAC Encoded
             mov_read_mac_string(c, pb, str_size, str, str_size_alloc);
         } else if (data_type == 21) { // BE signed integer, variable size
@@ -520,11 +525,11 @@ retry:
             }
             str[str_size] = 0;
         }
-        c->fc->event_flags |= AVFMT_EVENT_FLAG_METADATA_UPDATED;
-        av_dict_set(&c->fc->metadata, key, str, 0);
+        s->event_flags |= AVFMT_EVENT_FLAG_METADATA_UPDATED;
+        av_dict_set(&metadata, key, str, 0);
         if (*language && strcmp(language, "und")) {
             snprintf(key2, sizeof(key2), "%s-%s", key, language);
-            av_dict_set(&c->fc->metadata, key2, str, 0);
+            av_dict_set(&metadata, key2, str, 0);
         }
         if (!strcmp(key, "encoder")) {
             int major, minor, micro;

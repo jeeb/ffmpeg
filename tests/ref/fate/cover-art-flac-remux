@@ -1,5 +1,5 @@
-6defc5081a59ab12c8a5f9e263b25068 *tests/data/fate/cover-art-flac-remux.flac
-1098537 tests/data/fate/cover-art-flac-remux.flac
+0e0ef6ad2008f1f3889d71a94e0491e8 *tests/data/fate/cover-art-flac-remux.flac
+1098447 tests/data/fate/cover-art-flac-remux.flac
 #extradata 0:       34, 0x8d830abd
 #tb 0: 1/44100
 #media_type 0: audio
@@ -96,14 +96,10 @@ TAG:major_brand=M4A
 TAG:minor_version=0
 TAG:compatible_brands=M4A mp42isom
 TAG:disc=1
-TAG:title=Inside
 TAG:compilation=1
 TAG:gapless_playback=0
-TAG:track=5/13
 TAG:Encoding Params=vers
 TAG:iTunNORM= 000004DF 000004C2 00001E64 00001AB3 00000FB9 00000FB9 00006480 00006480 00000FB9 00000B52
-TAG:artist=Maxwell Strait
-TAG:album_artist=Maxwell Strait
-TAG:album=OpenMusic
 TAG:genre=Rock
+TAG:track=5/13
 [/FORMAT]
