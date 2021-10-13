@@ -297,6 +297,16 @@ typedef struct AVIOContext {
      * used keeping track of already written data for a later flush.
      */
     unsigned char *buf_ptr_max;
+
+    /**
+     * Read-only statistic of bytes read for this AVIOContext.
+     */
+    int64_t bytes_read;
+
+    /**
+     * Read-only statistic of bytes written for this AVIOContext.
+     */
+    int64_t bytes_written;
 } AVIOContext;
 
 /**

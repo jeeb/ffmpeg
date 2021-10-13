@@ -165,7 +165,7 @@ static void writeout(AVIOContext *s, const uint8_t *data, int len)
             s->error = ret;
         } else {
             if (s->pos + len > ctx->bytes_written) {
-                ctx->bytes_written = s->pos + len;
+                s->bytes_written = ctx->bytes_written = s->pos + len;
                 s->written = ctx->bytes_written;
             }
         }
@@ -575,6 +575,7 @@ static void fill_buffer(AVIOContext *s)
         s->buf_ptr = dst;
         s->buf_end = dst + len;
         ffiocontext(s)->bytes_read += len;
+        s->bytes_read = ffiocontext(s)->bytes_read;
     }
 }
 
@@ -648,6 +649,7 @@ int avio_read(AVIOContext *s, unsigned char *buf, int size)
                 } else {
                     s->pos += len;
                     ffiocontext(s)->bytes_read += len;
+                    s->bytes_read = ffiocontext(s)->bytes_read;
                     size -= len;
                     buf += len;
                     // reset the buffer
