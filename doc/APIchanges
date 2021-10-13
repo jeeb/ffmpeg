@@ -14,6 +14,15 @@ libavutil:     2021-04-27
 
 API changes, most recent first:
 
+2021-10-13 - xxxxxxxxxx - lavf 59.8.100 - avio.h
+  Deprecate AVIOContext.written. Originally added as a private entry in
+  commit 3f75e5116b900f1428aa13041fc7d6301bf1988a, but its grouping with
+  the comment noting its private state was missed during merging of the field
+  from Libav (most likely due to an already existing field in between).
+
+  Users should migrate to the public field AVIOContext.bytes_written, which
+  returns the same value.
+
 2021-09-26 - xxxxxxxxxx - lavf 59.7.100 - avio.h
   Introduce public bytes_{read,written} statistic fields to AVIOContext.
 
