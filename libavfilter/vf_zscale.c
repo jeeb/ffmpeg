@@ -126,6 +126,8 @@ typedef struct ZScaleContext {
     enum AVColorPrimaries in_primaries, out_primaries;
     enum AVColorRange in_range, out_range;
     enum AVChromaLocation in_chromal, out_chromal;
+
+    int lel;
 } ZScaleContext;
 
 static av_cold int init(AVFilterContext *ctx)
@@ -686,6 +688,12 @@ static int filter_frame(AVFilterLink *link, AVFrame *in)
     }
 
     update_output_color_information(s, out);
+
+    av_log_once(s, AV_LOG_VERBOSE, AV_LOG_TRACE, &(s->lel),
+                "output frame chroma location: %s "
+                "(s->chromal: %d, dst_format.chroma_location: %d)\n",
+                av_chroma_location_name(out->chroma_location),
+                s->chromal, s->dst_format.chroma_location);
 
     av_reduce(&out->sample_aspect_ratio.num, &out->sample_aspect_ratio.den,
               (int64_t)in->sample_aspect_ratio.num * outlink->h * link->w,
