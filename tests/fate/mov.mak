@@ -143,6 +143,27 @@ FATE_MOV_FFMPEG_FFPROBE-$(call TRANSCODE, TTML SUBRIP, MP4 MOV, SRT_DEMUXER TTML
 fate-mov-mp4-ttml-stpp: CMD = transcode srt $(TARGET_SAMPLES)/sub/SubRip_capability_tester.srt mp4 "-map 0:s -c:s ttml -time_base:s 1:1000" "-map 0 -c copy" "-of json -show_entries packet:stream=index,codec_type,codec_tag_string,codec_tag,codec_name,time_base,start_time,duration_ts,duration,nb_frames,nb_read_packets:stream_tags"
 fate-mov-mp4-ttml-dfxp: CMD = transcode srt $(TARGET_SAMPLES)/sub/SubRip_capability_tester.srt mp4 "-map 0:s -c:s ttml -time_base:s 1:1000 -tag:s dfxp -strict unofficial" "-map 0 -c copy" "-of json -show_entries packet:stream=index,codec_type,codec_tag_string,codec_tag,codec_name,time_base,start_time,duration_ts,duration,nb_frames,nb_read_packets:stream_tags"
 
+FATE_MOV_FFMPEG_FFPROBE-$(call TRANSCODE, TTML SUBRIP, MP4 MOV, LAVFI_INDEV SMPTEHDBARS_FILTER SRT_DEMUXER MPEG2VIDEO_ENCODER TTML_MUXER RAWVIDEO_MUXER) += fate-mov-mp4-fragmented-ttml-stpp
+fate-mov-mp4-fragmented-ttml-stpp: CMD = transcode srt $(TARGET_SAMPLES)/sub/SubRip_capability_tester.srt mp4 \
+  "-map 1:v -map 0:s \
+   -c:v mpeg2video -b:v 2M -g 48 -sc_threshold 1000000000 \
+   -c:s ttml -time_base:s 1:1000 \
+   -movflags +cmaf" \
+  "-map 0:s -c copy" \
+  "-select_streams s -of csv -show_packets -show_data_hash crc32" \
+  "-f lavfi -i smptehdbars=duration=70:size=320x180:rate=24000/1001,format=yuv420p" \
+  "" "" "rawvideo"
+
+FATE_MOV_FFMPEG_FFPROBE-$(call TRANSCODE, TTML SUBRIP, ISMV MOV, LAVFI_INDEV SMPTEHDBARS_FILTER SRT_DEMUXER MPEG2VIDEO_ENCODER TTML_MUXER RAWVIDEO_MUXER) += fate-mov-mp4-fragmented-ttml-dfxp
+fate-mov-mp4-fragmented-ttml-dfxp: CMD = transcode srt $(TARGET_SAMPLES)/sub/SubRip_capability_tester.srt ismv \
+  "-map 1:v -map 0:s \
+   -c:v mpeg2video -b:v 2M -g 48 -sc_threshold 1000000000 \
+   -c:s ttml -tag:s dfxp -time_base:s 1:1000" \
+  "-map 0:s -c copy" \
+  "-select_streams s -of csv -show_packets -show_data_hash crc32" \
+  "-f lavfi -i smptehdbars=duration=70:size=320x180:rate=24000/1001,format=yuv420p" \
+  "" "" "rawvideo"
+
 # FIXME: Uncomment these two tests once the test files are uploaded to the fate
 # server.
 # avif demuxing - still image with 1 item.
