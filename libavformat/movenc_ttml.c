@@ -54,6 +54,57 @@ static int mov_init_ttml_writer(MOVTrack *track, AVFormatContext **out_ctx)
     return 0;
 }
 
+static void mov_calculate_start_and_end_of_other_tracks(
+    AVFormatContext *s, MOVTrack *track, int64_t *start_pts, int64_t *end_pts)
+{
+    MOVMuxContext *mov = s->priv_data;
+
+    // Initialize at the end of the previous document/fragment, which is NOPTS
+    // until the first fragment is created.
+    int64_t max_track_end_dts = *start_pts = track->end_pts;
+
+    av_log(s, AV_LOG_VERBOSE, "calculation initial start/end %"PRId64"\n",
+           max_track_end_dts);
+
+    for (unsigned int i = 0; i < s->nb_streams; i++) {
+        MOVTrack *other_track = &mov->tracks[i];
+
+        // Skip our own track, any other track that needs squashing,
+        // or any track which still has its start_dts at NOPTS or
+        // any track that did not yet get any packets.
+        if (track == other_track ||
+            other_track->squash_fragment_samples_to_one ||
+            other_track->start_dts == AV_NOPTS_VALUE ||
+            !other_track->entry) {
+            continue;
+        }
+
+        {
+            int64_t picked_start = av_rescale_q_rnd(other_track->cluster[0].dts + other_track->cluster[0].cts,
+                                                    other_track->st->time_base,
+                                                    track->st->time_base,
+                                                    AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX);
+            int64_t picked_end   = av_rescale_q_rnd(other_track->end_pts,
+                                                    other_track->st->time_base,
+                                                    track->st->time_base,
+                                                    AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX);
+
+            av_log(s, AV_LOG_VERBOSE, "thingamajigs (track %d, %s): start: %"PRId64", end %"PRId64"\n",
+                   other_track->track_id, av_get_media_type_string(other_track->st->codecpar->codec_type),
+                   picked_start, picked_end);
+
+            if (*start_pts == AV_NOPTS_VALUE)
+                *start_pts = picked_start;
+            else if (picked_start >= track->end_pts)
+                *start_pts = FFMIN(*start_pts, picked_start);
+
+            max_track_end_dts = FFMAX(max_track_end_dts, picked_end);
+        }
+    }
+
+    *end_pts = max_track_end_dts;
+}
+
 static int mov_write_ttml_document_from_queue(AVFormatContext *s,
                                               AVFormatContext *ttml_ctx,
                                               MOVTrack *track,
@@ -111,6 +162,9 @@ int ff_mov_generate_squashed_ttml_packet(AVFormatContext *s,
     int64_t start_ts = 0;
     int64_t duration = 0;
 
+    int64_t calculated_start = AV_NOPTS_VALUE;
+    int64_t calculated_end = AV_NOPTS_VALUE;
+
     int ret = AVERROR_BUG;
 
     if ((ret = mov_init_ttml_writer(track, &ttml_ctx)) < 0) {
@@ -118,6 +172,10 @@ int ff_mov_generate_squashed_ttml_packet(AVFormatContext *s,
                av_err2str(ret));
         goto cleanup;
     }
+
+    mov_calculate_start_and_end_of_other_tracks(s, track, &calculated_start, &calculated_end);
+    av_log(s, AV_LOG_VERBOSE, "Calculated start/end for subtitle fragment: start: %"PRId64", end %"PRId64"\n",
+           calculated_start, calculated_end);
 
     if (!track->squashed_packet_queue.head) {
         // empty queue, write minimal empty document with zero duration
