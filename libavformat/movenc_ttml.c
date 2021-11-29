@@ -116,13 +116,82 @@ static int mov_write_ttml_document_from_queue(AVFormatContext *s,
     int64_t start_ts = track->start_dts == AV_NOPTS_VALUE ?
                        0 : (track->start_dts + track->track_duration);
     int64_t end_ts   = start_ts;
+    unsigned int time_limited = 0;
+
+    if (*out_start_ts != AV_NOPTS_VALUE) {
+        // we have non-nopts values here, thus we have been given a time range
+        time_limited = 1;
+        start_ts = *out_start_ts;
+        end_ts   = *out_start_ts + *out_duration;
+    }
 
     if ((ret = avformat_write_header(ttml_ctx, NULL)) < 0) {
         return ret;
     }
 
     while (!avpriv_packet_list_get(&track->squashed_packet_queue, pkt)) {
-        end_ts = FFMAX(end_ts, pkt->pts + pkt->duration);
+        unsigned int stop_at_current_packet = 0;
+
+        av_log(s, AV_LOG_VERBOSE,
+               "pkt before: pts: %"PRId64", duration: %"PRId64"\n",
+               pkt->pts, pkt->duration);
+
+        if (time_limited) {
+            // special cases first:
+            if (pkt->pts + pkt->duration < start_ts) {
+                // too late for our fragment, unfortunately :<
+                // unref and proceed to next packet in queue.
+                av_packet_unref(pkt);
+                goto next_iteration;
+            } else if (pkt->pts >= end_ts) {
+                // starts after this fragment, put back to queue
+                ret = avpriv_packet_list_put(&track->squashed_packet_queue,
+                                             pkt, av_packet_ref,
+                                             FF_PACKETLIST_FLAG_PREPEND);
+                if (ret < 0)
+                    goto cleanup;
+
+                stop_at_current_packet = 1;
+                goto next_iteration;
+            }
+
+            // limit packet pts to start_ts
+            if (pkt->pts < start_ts) {
+                pkt->duration -= start_ts - pkt->pts;
+                pkt->pts = start_ts;
+            }
+
+            if (pkt->pts + pkt->duration > end_ts) {
+                // goes over our current fragment, create duplicate and
+                // put it back to list while
+                int64_t offset = end_ts - pkt->pts;
+                AVPacket *copy = av_packet_clone(pkt);
+                stop_at_current_packet = 1;
+
+                if (!copy) {
+                    ret = AVERROR(ENOMEM);
+                    goto cleanup;
+                }
+
+                copy->pts = copy->dts = copy->pts + offset;
+                copy->duration -= offset;
+
+                ret = avpriv_packet_list_put(&track->squashed_packet_queue,
+                                             copy, av_packet_ref,
+                                             FF_PACKETLIST_FLAG_PREPEND);
+                if (ret < 0)
+                    goto cleanup;
+
+                // and for our normal packet we just set duration to offset
+                pkt->duration = offset;
+            }
+        } else {
+            end_ts = FFMAX(end_ts, pkt->pts + pkt->duration);
+        }
+
+        av_log(s, AV_LOG_VERBOSE,
+               "pkt after: pts: %"PRId64", duration: %"PRId64"\n",
+               pkt->pts, pkt->duration);
 
         // in case of the 'dfxp' muxing mode, each written document is offset
         // to its containing sample's beginning.
@@ -140,6 +209,10 @@ static int mov_write_ttml_document_from_queue(AVFormatContext *s,
         }
 
         av_packet_unref(pkt);
+
+next_iteration:
+        if (stop_at_current_packet)
+            break;
     }
 
     if ((ret = av_write_trailer(ttml_ctx)) < 0)
@@ -157,13 +230,11 @@ cleanup:
 int ff_mov_generate_squashed_ttml_packet(AVFormatContext *s,
                                          MOVTrack *track, AVPacket *pkt)
 {
+    MOVMuxContext *mov = s->priv_data;
     AVFormatContext *ttml_ctx = NULL;
     // values for the generated AVPacket
-    int64_t start_ts = 0;
+    int64_t start_ts = AV_NOPTS_VALUE;
     int64_t duration = 0;
-
-    int64_t calculated_start = AV_NOPTS_VALUE;
-    int64_t calculated_end = AV_NOPTS_VALUE;
 
     int ret = AVERROR_BUG;
 
@@ -173,16 +244,30 @@ int ff_mov_generate_squashed_ttml_packet(AVFormatContext *s,
         goto cleanup;
     }
 
-    mov_calculate_start_and_end_of_other_tracks(s, track, &calculated_start, &calculated_end);
-    av_log(s, AV_LOG_VERBOSE, "Calculated start/end for subtitle fragment: start: %"PRId64", end %"PRId64"\n",
-           calculated_start, calculated_end);
+    if (mov->flags & FF_MOV_FLAG_FRAGMENT) {
+        int64_t calculated_start = AV_NOPTS_VALUE;
+        int64_t calculated_end = AV_NOPTS_VALUE;
+
+        mov_calculate_start_and_end_of_other_tracks(s, track, &calculated_start, &calculated_end);
+        av_log(s, AV_LOG_VERBOSE, "Calculated start/end for subtitle fragment: start: %"PRId64", end %"PRId64"\n",
+               calculated_start, calculated_end);
+
+        if (calculated_start != AV_NOPTS_VALUE) {
+            start_ts = calculated_start;
+            duration = calculated_end - calculated_start;
+            av_log(s, AV_LOG_VERBOSE, "New calculated packet start: %"PRId64", duration: %"PRId64"\n",
+                   start_ts, duration);
+        }
+    }
 
     if (!track->squashed_packet_queue.head) {
         // empty queue, write minimal empty document with zero duration
         avio_write(ttml_ctx->pb, empty_ttml_document,
                    sizeof(empty_ttml_document) - 1);
-        start_ts = 0;
-        duration = 0;
+        if (start_ts == AV_NOPTS_VALUE) {
+            start_ts = 0;
+            duration = 0;
+        }
         goto generate_packet;
     }
 
