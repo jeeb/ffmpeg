@@ -33,3 +33,26 @@ AVDOVIDecoderConfigurationRecord *av_dovi_alloc(size_t *size)
 
     return dovi;
 }
+
+/* based on guesswork, see mkvtoolnix and dovi_tool */
+int av_dovi_profile(const AVDOVIRpuDataHeader *hdr)
+{
+    switch (hdr->vdr_rpu_profile) {
+    case 0:
+        if (hdr->bl_video_full_range_flag)
+            return 5;
+        break;
+    case 1:
+        if (hdr->el_spatial_resampling_filter_flag && !hdr->disable_residual_flag) {
+            if (hdr->vdr_bit_depth == 12) {
+                return 7;
+            } else {
+                return 4;
+            }
+        } else {
+            return 8;
+        }
+    }
+
+    return 0; /* unknown */
+}
