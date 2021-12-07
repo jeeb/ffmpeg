@@ -206,6 +206,10 @@ typedef enum {
     SECTION_ID_STREAM_SIDE_DATA_LIST,
     SECTION_ID_STREAM_SIDE_DATA,
     SECTION_ID_SUBTITLE,
+    SECTION_ID_DOVI_RESHAPING_CURVES,
+    SECTION_ID_DOVI_RESHAPING_CURVE,
+    SECTION_ID_DOVI_RESHAPING_PIVOTS,
+    SECTION_ID_DOVI_RESHAPING_PIVOT,
 } SectionID;
 
 static struct section sections[] = {
@@ -256,6 +260,10 @@ static struct section sections[] = {
     [SECTION_ID_STREAM_SIDE_DATA_LIST] ={ SECTION_ID_STREAM_SIDE_DATA_LIST, "side_data_list", SECTION_FLAG_IS_ARRAY, { SECTION_ID_STREAM_SIDE_DATA, -1 }, .element_name = "side_data", .unique_name = "stream_side_data_list" },
     [SECTION_ID_STREAM_SIDE_DATA] =     { SECTION_ID_STREAM_SIDE_DATA, "side_data", 0, { -1 } },
     [SECTION_ID_SUBTITLE] =           { SECTION_ID_SUBTITLE, "subtitle", 0, { -1 } },
+    [SECTION_ID_DOVI_RESHAPING_CURVES] = { SECTION_ID_DOVI_RESHAPING_CURVES, "reshaping_curves", SECTION_FLAG_IS_ARRAY, { SECTION_ID_DOVI_RESHAPING_CURVE, -1 }, .element_name = "reshaping_curve", .unique_name = "reshaping_curves" },
+    [SECTION_ID_DOVI_RESHAPING_CURVE] = { SECTION_ID_DOVI_RESHAPING_CURVE, "reshaping_curve", 0, { -1 } },
+    [SECTION_ID_DOVI_RESHAPING_PIVOTS] = { SECTION_ID_DOVI_RESHAPING_PIVOTS, "pivots", SECTION_FLAG_IS_ARRAY, { SECTION_ID_DOVI_RESHAPING_PIVOT, -1 }, .element_name = "pivot", .unique_name = "reshaping_pivots" },
+    [SECTION_ID_DOVI_RESHAPING_PIVOT] = { SECTION_ID_DOVI_RESHAPING_PIVOT, "pivot", 0, { -1 } },
 };
 
 static const OptionDef *options;
@@ -1852,6 +1860,91 @@ static inline int show_tags(WriterContext *w, AVDictionary *tags, int section_id
     return ret;
 }
 
+static void print_dovi_metadata(WriterContext *w, const AVDOVIMetadata *dovi)
+{
+    if (!dovi)
+        return;
+
+    {
+        const AVDOVIRpuDataHeader *hdr     = &dovi->header;
+        const AVDOVIDataMapping   *mapping = &dovi->mapping;
+        const AVDOVIColorMetadata *color   = &dovi->color;
+
+        // header
+        print_int("rpu_type",        hdr->rpu_type);
+        print_int("rpu_format",      hdr->rpu_format);
+        print_int("vdr_rpu_profile", hdr->vdr_rpu_profile);
+        print_int("vdr_rpu_level",   hdr->vdr_rpu_level);
+        print_int("chroma_resampling_explicit_filter_flag",
+                  hdr->chroma_resampling_explicit_filter_flag);
+        print_int("coef_data_type",           hdr->coef_data_type);
+        print_int("coef_log2_denom",          hdr->coef_log2_denom);
+        print_int("vdr_rpu_normalized_idc",   hdr->vdr_rpu_normalized_idc);
+        print_int("bl_video_full_range_flag", hdr->bl_video_full_range_flag);
+        print_int("bl_bit_depth",             hdr->bl_bit_depth);
+        print_int("el_bit_depth",             hdr->el_bit_depth);
+        print_int("vdr_bit_depth",            hdr->vdr_bit_depth);
+        print_int("spatial_resampling_filter_flag",
+                  hdr->spatial_resampling_filter_flag);
+        print_int("el_spatial_resampling_filter_flag",
+                  hdr->el_spatial_resampling_filter_flag);
+        print_int("disable_residual_flag", hdr->disable_residual_flag);
+
+        // data mapping values
+        print_int("vdr_rpu_id",                mapping->vdr_rpu_id);
+        print_int("mapping_color_space",       mapping->mapping_color_space);
+        print_int("mapping_chroma_format_idc",
+                  mapping->mapping_chroma_format_idc);
+        print_int("nlq_method_idc",            mapping->nlq_method_idc);
+        print_int("num_x_partitions",          mapping->num_x_partitions);
+        print_int("num_y_partitions",          mapping->num_y_partitions);
+
+        writer_print_section_header(w, SECTION_ID_DOVI_RESHAPING_CURVES);
+
+        for (int c = 0; c < 3; c++) {
+            const AVDOVIReshapingCurve *curve = &mapping->curves[c];
+            const AVDOVINLQParams      *nlq   = &mapping->nlq[c];
+
+            writer_print_section_header(w, SECTION_ID_DOVI_RESHAPING_CURVE);
+
+            writer_print_section_header(w, SECTION_ID_DOVI_RESHAPING_PIVOTS);
+
+            for (int i = 0; i < curve->num_pivots; i++) {
+                const char *mapping_method_name = "unknown";
+                switch (curve->mapping_idc[i]) {
+                case AV_DOVI_MAPPING_POLYNOMIAL:
+                    mapping_method_name = "polynomial";
+                    break;
+                case AV_DOVI_MAPPING_MMR:
+                    mapping_method_name = "mmr";
+                    break;
+                default:
+                    break;
+                }
+
+                writer_print_section_header(w, SECTION_ID_DOVI_RESHAPING_PIVOT);
+
+                print_int("pivot_point",       curve->pivots[i]);
+                print_int("mapping_method", curve->mapping_idc[i]);
+                print_str("mapping_method_name",    mapping_method_name);
+                print_int("poly_order",        curve->poly_order[i]);
+
+                // SECTION_ID_DOVI_RESHAPING_PIVOT
+                writer_print_section_footer(w);
+            }
+
+            // SECTION_ID_DOVI_RESHAPING_PIVOTS
+            writer_print_section_footer(w);
+
+            // SECTION_ID_DOVI_RESHAPING_CURVE
+            writer_print_section_footer(w);
+        }
+
+        // SECTION_ID_DOVI_RESHAPING_CURVES
+        writer_print_section_footer(w);
+    }
+}
+
 static void print_dynamic_hdr10_plus(WriterContext *w, const AVDynamicHDRPlus *metadata)
 {
     if (!metadata)
@@ -2368,6 +2461,8 @@ static void show_frame(WriterContext *w, AVFrame *frame, AVStream *stream,
                 if (tag)
                     print_str(tag->key, tag->value);
                 print_int("size", sd->size);
+            } else if (sd->type == AV_FRAME_DATA_DOVI_METADATA) {
+                print_dovi_metadata(w, (const AVDOVIMetadata *)sd->data);
             }
             writer_print_section_footer(w);
         }
