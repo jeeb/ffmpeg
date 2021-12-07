@@ -38,6 +38,7 @@
 #include "bswapdsp.h"
 #include "bytestream.h"
 #include "cabac_functions.h"
+#include "dovi.h"
 #include "golomb.h"
 #include "hevc.h"
 #include "hevc_data.h"
@@ -2967,6 +2968,19 @@ static int set_side_data(HEVCContext *s)
         s->rpu_buf = NULL;
     }
 
+    if (s->dovi_ctx.mapping && s->dovi_ctx.color) {
+        AVDOVIMetadata *dovi;
+        AVFrameSideData *sd = av_frame_new_side_data(out, AV_FRAME_DATA_DOVI_METADATA,
+                                                     sizeof(AVDOVIMetadata));
+        if (!sd)
+            return AVERROR(ENOMEM);
+
+        dovi = (AVDOVIMetadata *) sd->data;
+        memcpy(&dovi->header, &s->dovi_ctx.header, sizeof(dovi->header));
+        memcpy(&dovi->mapping, s->dovi_ctx.mapping, sizeof(dovi->mapping));
+        memcpy(&dovi->color, s->dovi_ctx.color, sizeof(dovi->color));
+    }
+
     return 0;
 }
 
@@ -3298,16 +3312,23 @@ static int decode_nal_units(HEVCContext *s, const uint8_t *buf, int length)
     if (s->pkt.nb_nals > 1 && s->pkt.nals[s->pkt.nb_nals - 1].type == HEVC_NAL_UNSPEC62 &&
         s->pkt.nals[s->pkt.nb_nals - 1].size > 2 && !s->pkt.nals[s->pkt.nb_nals - 1].nuh_layer_id
         && !s->pkt.nals[s->pkt.nb_nals - 1].temporal_id) {
+        H2645NAL *nal = &s->pkt.nals[s->pkt.nb_nals - 1];
         if (s->rpu_buf) {
             av_buffer_unref(&s->rpu_buf);
             av_log(s->avctx, AV_LOG_WARNING, "Multiple Dolby Vision RPUs found in one AU. Skipping previous.\n");
         }
 
-        s->rpu_buf = av_buffer_alloc(s->pkt.nals[s->pkt.nb_nals - 1].raw_size - 2);
+        s->rpu_buf = av_buffer_alloc(nal->raw_size - 2);
         if (!s->rpu_buf)
             return AVERROR(ENOMEM);
 
-        memcpy(s->rpu_buf->data, s->pkt.nals[s->pkt.nb_nals - 1].raw_data + 2, s->pkt.nals[s->pkt.nb_nals - 1].raw_size - 2);
+        memcpy(s->rpu_buf->data, nal->raw_data + 2, nal->raw_size - 2);
+        ret = ff_dovi_rpu_parse(&s->dovi_ctx, nal->data + 2, nal->size - 2);
+        if (ret < 0) {
+            av_buffer_unref(&s->rpu_buf);
+            av_log(s->avctx, AV_LOG_WARNING, "Error parsing DOVI NAL unit.\n");
+            goto fail;
+        }
     }
 
     /* decode the NAL units */
@@ -3553,6 +3574,7 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
 
     pic_arrays_free(s);
 
+    ff_dovi_ctx_unref(&s->dovi_ctx);
     av_buffer_unref(&s->rpu_buf);
 
     av_freep(&s->md5_ctx);
@@ -3637,6 +3659,7 @@ static av_cold int hevc_init_context(AVCodecContext *avctx)
 
     ff_bswapdsp_init(&s->bdsp);
 
+    s->dovi_ctx.avctx = avctx;
     s->context_initialized = 1;
     s->eos = 0;
 
@@ -3745,6 +3768,10 @@ static int hevc_update_thread_context(AVCodecContext *dst,
     if (ret < 0)
         return ret;
 
+    ret = ff_dovi_ctx_replace(&s->dovi_ctx, &s0->dovi_ctx);
+    if (ret < 0)
+        return ret;
+
     s->sei.frame_packing        = s0->sei.frame_packing;
     s->sei.display_orientation  = s0->sei.display_orientation;
     s->sei.mastering_display    = s0->sei.mastering_display;
@@ -3801,6 +3828,7 @@ static void hevc_decode_flush(AVCodecContext *avctx)
     HEVCContext *s = avctx->priv_data;
     ff_hevc_flush_dpb(s);
     ff_hevc_reset_sei(&s->sei);
+    ff_dovi_ctx_unref(&s->dovi_ctx);
     av_buffer_unref(&s->rpu_buf);
     s->max_ra = INT_MAX;
     s->eos = 1;
