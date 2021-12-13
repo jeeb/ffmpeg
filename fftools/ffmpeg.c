@@ -2482,27 +2482,16 @@ fail:
     return err < 0 ? err : ret;
 }
 
-static int transcode_subtitles(InputStream *ist, AVPacket *pkt, int *got_output,
-                               int *decode_failed)
+static int encode_mux_subtitles(InputStream *ist, AVSubtitle *subtitle, int *got_output)
 {
-    AVSubtitle subtitle;
+    int ret = 0;
     int free_sub = 1;
-    int i, ret = avcodec_decode_subtitle2(ist->dec_ctx,
-                                          &subtitle, got_output, pkt);
 
-    check_decode_result(NULL, got_output, ret);
-
-    if (ret < 0 || !*got_output) {
-        *decode_failed = 1;
-        if (!pkt->size)
-            sub2video_flush(ist);
-        return ret;
-    }
 
     if (ist->fix_sub_duration) {
         int end = 1;
         if (ist->prev_sub.got_output) {
-            end = av_rescale(subtitle.pts - ist->prev_sub.subtitle.pts,
+            end = av_rescale(subtitle->pts - ist->prev_sub.subtitle.pts,
                              1000, AV_TIME_BASE);
             if (end < ist->prev_sub.subtitle.end_display_time) {
                 av_log(ist->dec_ctx, AV_LOG_DEBUG,
@@ -2514,7 +2503,7 @@ static int transcode_subtitles(InputStream *ist, AVPacket *pkt, int *got_output,
         }
         FFSWAP(int,        *got_output, ist->prev_sub.got_output);
         FFSWAP(int,        ret,         ist->prev_sub.ret);
-        FFSWAP(AVSubtitle, subtitle,    ist->prev_sub.subtitle);
+        FFSWAP(AVSubtitle, *subtitle,   ist->prev_sub.subtitle);
         if (end <= 0)
             goto out;
     }
@@ -2523,7 +2512,7 @@ static int transcode_subtitles(InputStream *ist, AVPacket *pkt, int *got_output,
         return ret;
 
     if (ist->sub2video.frame) {
-        sub2video_update(ist, INT64_MIN, &subtitle);
+        sub2video_update(ist, INT64_MIN, subtitle);
     } else if (ist->nb_filters) {
         if (!ist->sub2video.sub_queue)
             ist->sub2video.sub_queue = av_fifo_alloc(8 * sizeof(AVSubtitle));
@@ -2534,29 +2523,48 @@ static int transcode_subtitles(InputStream *ist, AVPacket *pkt, int *got_output,
             if (ret < 0)
                 exit_program(1);
         }
-        av_fifo_generic_write(ist->sub2video.sub_queue, &subtitle, sizeof(subtitle), NULL);
+        av_fifo_generic_write(ist->sub2video.sub_queue, subtitle, sizeof(*subtitle), NULL);
         free_sub = 0;
     }
 
-    if (!subtitle.num_rects)
+    if (!subtitle->num_rects)
         goto out;
 
     ist->frames_decoded++;
 
-    for (i = 0; i < nb_output_streams; i++) {
+    for (int i = 0; i < nb_output_streams; i++) {
         OutputStream *ost = output_streams[i];
 
         if (!check_output_constraints(ist, ost) || !ost->encoding_needed
             || ost->enc->type != AVMEDIA_TYPE_SUBTITLE)
             continue;
 
-        do_subtitle_out(output_files[ost->file_index], ost, &subtitle);
+        do_subtitle_out(output_files[ost->file_index], ost, subtitle);
     }
 
 out:
     if (free_sub)
-        avsubtitle_free(&subtitle);
+        avsubtitle_free(subtitle);
     return ret;
+}
+
+static int transcode_subtitles(InputStream *ist, AVPacket *pkt, int *got_output,
+                               int *decode_failed)
+{
+    AVSubtitle subtitle;
+    int ret = avcodec_decode_subtitle2(ist->dec_ctx,
+                                       &subtitle, got_output, pkt);
+
+    check_decode_result(NULL, got_output, ret);
+
+    if (ret < 0 || !*got_output) {
+        *decode_failed = 1;
+        if (!pkt->size)
+            sub2video_flush(ist);
+        return ret;
+    }
+
+    return encode_mux_subtitles(ist, &subtitle, got_output);
 }
 
 static int send_filter_eof(InputStream *ist)
