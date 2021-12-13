@@ -1297,6 +1297,17 @@ List all hardware acceleration components enabled in this build of ffmpeg.
 Actual runtime availability depends on the hardware and its suitable driver
 being installed.
 
+@item -fix_sub_duration_heartbeat[:@var{stream_specifier}]
+Set a specific output video stream as the heartbeat stream according to which
+to split and push through currently in-progress subtitle upon receipt of a
+random access packet.
+
+This lowers the latency of subtitles for which the end packet or the following
+subtitle has not yet been received.
+
+Requires @option{-fix_sub_duration} to be set for the relevant input subtitle
+stream for this to have any effect.
+
 @end table
 
 @section Audio Options
