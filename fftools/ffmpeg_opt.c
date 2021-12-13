@@ -86,6 +86,7 @@ static const char *const opt_name_filters[]                   = {"filter", "af",
 static const char *const opt_name_filter_scripts[]            = {"filter_script", NULL};
 static const char *const opt_name_reinit_filters[]            = {"reinit_filter", NULL};
 static const char *const opt_name_fix_sub_duration[]          = {"fix_sub_duration", NULL};
+static const char *const opt_name_fix_sub_duration_heartbeat[] = {"fix_sub_duration_heartbeat", NULL};
 static const char *const opt_name_canvas_sizes[]              = {"canvas_size", NULL};
 static const char *const opt_name_pass[]                      = {"pass", NULL};
 static const char *const opt_name_passlogfiles[]              = {"passlogfile", NULL};
@@ -1598,6 +1599,9 @@ static OutputStream *new_output_stream(OptionsContext *o, AVFormatContext *oc, e
     MATCH_PER_STREAM_OPT(muxing_queue_data_threshold, i, ost->muxing_queue_data_threshold, oc, st);
 
     MATCH_PER_STREAM_OPT(bits_per_raw_sample, i, ost->bits_per_raw_sample,
+                         oc, st);
+
+    MATCH_PER_STREAM_OPT(fix_sub_duration_heartbeat, i, ost->fix_sub_duration_heartbeat,
                          oc, st);
 
     if (oc->oformat->flags & AVFMT_GLOBALHEADER)
@@ -3793,6 +3797,11 @@ const OptionDef options[] = {
     { "autoscale",        HAS_ARG | OPT_BOOL | OPT_SPEC |
                           OPT_EXPERT | OPT_OUTPUT,                               { .off = OFFSET(autoscale) },
         "automatically insert a scale filter at the end of the filter graph" },
+    { "fix_sub_duration_heartbeat", OPT_VIDEO | OPT_BOOL | OPT_EXPERT |
+                                    OPT_SPEC | OPT_OUTPUT,                       { .off = OFFSET(fix_sub_duration_heartbeat) },
+        "set this video output stream to be a heartbeat stream for "
+        "fix_sub_duration, according to which subtitles should be split at "
+        "random access points" },
 
     /* audio options */
     { "aframes",        OPT_AUDIO | HAS_ARG  | OPT_PERFILE | OPT_OUTPUT,           { .func_arg = opt_audio_frames },
