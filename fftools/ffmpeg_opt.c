@@ -2136,7 +2136,8 @@ static int set_dispositions(OutputFile *of)
     int have_default[AVMEDIA_TYPE_NB] = { 0 };
     int have_manual = 0;
 
-    // first, copy the input dispositions
+    // first, copy the input dispositions and set special TTML one for
+    // fix_sub_duration heartbeat streams
     for (int i = 0; i< of->ctx->nb_streams; i++) {
         OutputStream *ost = output_streams[of->ost_index + i];
 
@@ -2150,6 +2151,9 @@ static int set_dispositions(OutputFile *of)
             if (ost->st->disposition & AV_DISPOSITION_DEFAULT)
                 have_default[ost->st->codecpar->codec_type] = 1;
         }
+
+        if (ost->fix_sub_duration_heartbeat)
+            ost->st->disposition |= AV_DISPOSITION_TTML_FRAGMENTATION_MASTER;
     }
 
     if (have_manual) {
