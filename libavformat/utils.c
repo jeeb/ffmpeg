@@ -750,6 +750,7 @@ static const AVOption stream_options[] = {
         { "metadata",           .type = AV_OPT_TYPE_CONST, { .i64 = AV_DISPOSITION_METADATA          },    .unit = "disposition" },
         { "dependent",          .type = AV_OPT_TYPE_CONST, { .i64 = AV_DISPOSITION_DEPENDENT         },    .unit = "disposition" },
         { "still_image",        .type = AV_OPT_TYPE_CONST, { .i64 = AV_DISPOSITION_STILL_IMAGE       },    .unit = "disposition" },
+        { "ttml_fragmentation_master", .type = AV_OPT_TYPE_CONST, { .i64 = AV_DISPOSITION_TTML_FRAGMENTATION_MASTER       },    .unit = "disposition" },
     { NULL }
 };
 

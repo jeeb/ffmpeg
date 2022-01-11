@@ -905,6 +905,10 @@ typedef struct AVIndexEntry {
  * The video stream contains still images.
  */
 #define AV_DISPOSITION_STILL_IMAGE          (1 << 20)
+/**
+ * The stream is a TTML fragmentation master stream.
+ */
+#define AV_DISPOSITION_TTML_FRAGMENTATION_MASTER (1 << 21)
 
 /**
  * @return The AV_DISPOSITION_* flag corresponding to disp or a negative error
