@@ -242,6 +242,7 @@ typedef struct MOVMuxContext {
     MOVPrftBox write_prft;
     int empty_hdlr_name;
     int movie_timescale;
+    unsigned int ttml_fragmentation_master_present;
 } MOVMuxContext;
 
 #define FF_MOV_FLAG_RTP_HINT              (1 <<  0)

@@ -72,7 +72,8 @@ static void mov_calculate_start_and_end_of_other_tracks(
         if (track == other_track ||
             other_track->squash_fragment_samples_to_one ||
             other_track->start_dts == AV_NOPTS_VALUE ||
-            !other_track->entry) {
+            !other_track->entry ||
+            (mov->ttml_fragmentation_master_present && !(other_track->st->disposition & AV_DISPOSITION_TTML_FRAGMENTATION_MASTER))) {
             continue;
         }
 

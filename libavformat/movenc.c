@@ -6914,6 +6914,9 @@ static int mov_write_header(AVFormatContext *s)
         AVStream *st= s->streams[i];
         MOVTrack *track= &mov->tracks[i];
 
+        if (st->disposition & AV_DISPOSITION_TTML_FRAGMENTATION_MASTER)
+            mov->ttml_fragmentation_master_present = 1;
+
         /* copy extradata if it exists */
         if (st->codecpar->extradata_size) {
             if (st->codecpar->codec_id == AV_CODEC_ID_DVD_SUBTITLE)
