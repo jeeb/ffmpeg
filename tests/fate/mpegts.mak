@@ -19,6 +19,9 @@ FATE_MPEGTS_PROBE-$(call DEMDEC, MPEGTS) += fate-mpegts-probe-pmt-merge
 fate-mpegts-probe-pmt-merge: SRC = $(TARGET_SAMPLES)/mpegts/pmtchange.ts
 fate-mpegts-probe-pmt-merge: CMD = run $(PROBE_CODEC_NAME_COMMAND) -merge_pmt_versions 1 -i "$(SRC)"
 
+FATE_MPEGTS_PROBE-$(call DEMDEC, MPEGTS, MP2) += fate-mpegts-probe-sdt-data-stream
+fate-mpegts-probe-sdt-data-stream: SRC = $(TARGET_SAMPLES)/mpegts/mpegts_sdt_data_stream.ts
+fate-mpegts-probe-sdt-data-stream: CMD = run $(PROBE_CODEC_NAME_COMMAND) -i "$(SRC)"
 
 FATE_SAMPLES_FFPROBE += $(FATE_MPEGTS_PROBE-yes)
 
