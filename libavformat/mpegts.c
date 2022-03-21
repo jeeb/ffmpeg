@@ -2516,6 +2516,13 @@ static void pmt_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
             }
         }
         p = desc_list_end;
+
+        if (!ts->pkt && (stream_type >= 0x80 && stream_type <= 0xFF) &&
+            st->codecpar->codec_id == AV_CODEC_ID_NONE)
+            // if we are reading headers, and still have a user private stream
+            // with no proper codec set, do not stop reading at PMT. Data
+            // streams are marked within SDT.
+            ts->stop_parse = 0;
     }
 
     if (!ts->pids[pcr_pid])
@@ -2699,6 +2706,7 @@ static void sdt_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
     if (val < 0)
         return;
     for (;;) {
+        struct Program *program = NULL;
         sid = get16(&p, p_end);
         if (sid < 0)
             break;
@@ -2712,6 +2720,15 @@ static void sdt_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
         desc_list_end  = p + desc_list_len;
         if (desc_list_end > p_end)
             break;
+
+        program = get_program(ts, sid);
+
+        if (!ts->pkt && program && program->pmt_found)
+            // if during header reading we have already received a PMT for
+            // this program and now have received an SDT for it, stop further
+            // reading at this point.
+            ts->stop_parse = 2;
+
         for (;;) {
             desc_tag = get8(&p, desc_list_end);
             if (desc_tag < 0)
@@ -2744,6 +2761,42 @@ static void sdt_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
                 av_free(name);
                 av_free(provider_name);
                 break;
+            case 0x64: /* ETSI data broadcast descriptor; EN 300 468 6.2.11 */
+                if (desc_len < 3)
+                    // length of the always available header part, up to and
+                    // including the component_tag field.
+                    break;
+
+                {
+                    AVStream *st  = NULL;
+                    FFStream *sti = NULL;
+
+                    int data_broadcast_id = get16(&p, desc_end); // TS 101 162
+                    int component_tag     = get8(&p, desc_end);
+                    if (!component_tag)
+                        // no stream mapping according to component_tag
+                        break;
+
+                    av_log(ts->stream, AV_LOG_TRACE,
+                           "data broadcast id: %d, component tag: %d\n",
+                           data_broadcast_id, component_tag);
+
+                    if (!program)
+                        break;
+
+                    st = find_matching_stream(ts, 0, sid, component_tag + 1, 0,
+                                              program);
+                    if (!st)
+                        break;
+
+                    sti = ffstream(st);
+
+                    st->codecpar->codec_type = AVMEDIA_TYPE_DATA;
+                    st->codecpar->codec_id   = AV_CODEC_ID_BIN_DATA;
+                    sti->request_probe = sti->need_parsing = 0;
+                    sti->need_context_update = 1;
+                    break;
+                }
             default:
                 break;
             }

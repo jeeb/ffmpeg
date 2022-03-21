@@ -1,0 +1,14 @@
+[PROGRAM]
+[STREAM]
+codec_name=mp2
+[/STREAM]
+[STREAM]
+codec_name=bin_data
+[/STREAM]
+[/PROGRAM]
+[STREAM]
+codec_name=mp2
+[/STREAM]
+[STREAM]
+codec_name=bin_data
+[/STREAM]
