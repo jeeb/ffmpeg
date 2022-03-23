@@ -2055,6 +2055,28 @@ typedef struct AVCodecContext {
      *             The decoder can then override during decoding as needed.
      */
     AVChannelLayout ch_layout;
+
+    /**
+     * Configuration side data
+     * - decoding: unused
+     * - encoding: may be set by the caller to pass side data to an encoder
+     *             to be available during initialization. Side data that is
+     *             dynamic should be passed within the AVFrames fed during
+     *             processing.
+     */
+    AVFrameSideData **side_data;
+    int            nb_side_data;
+
+
+    /**
+     * Configuration props-only AVFrame. Stupid but allows for a PoC.
+     * - decoding: unused
+     * - encoding: may be set by the caller to pass side data to an encoder
+     *             to be available during initialization. Side data that is
+     *             dynamic should be passed within the AVFrames fed during
+     *             processing.
+     */
+    AVFrame *config_avframe;
 } AVCodecContext;
 
 /**
@@ -3163,6 +3185,9 @@ void av_fast_padded_mallocz(void *ptr, unsigned int *size, size_t min_size);
  */
 int avcodec_is_open(AVCodecContext *s);
 
+
+int av_avctx_apply_config_avframe(AVCodecContext *avctx,
+                                  const AVFrame *src);
 /**
  * @}
  */

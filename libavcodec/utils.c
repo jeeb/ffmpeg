@@ -1049,6 +1049,39 @@ AVCPBProperties *ff_add_cpb_side_data(AVCodecContext *avctx)
     return props;
 }
 
+/*
+static AVFrameSideData *av_avctx_get_side_data(const AVCodecContext *avctx,
+                                        enum AVFrameSideDataType type)
+{
+    for (int i = 0; i < avctx->nb_side_data; i++) {
+        if (avctx->side_data[i]->type == type)
+            return avctx->side_data[i];
+    }
+    return NULL;
+}
+*/
+
+int av_avctx_apply_config_avframe(AVCodecContext *avctx,
+                                  const AVFrame *src)
+{
+    int ret = AVERROR_BUG;
+    AVFrame *dst = avctx->config_avframe ?
+                   avctx->config_avframe : av_frame_alloc();
+    if (!dst)
+        return AVERROR(ENOMEM);
+
+    if ((ret = av_frame_copy_props(dst, src)) < 0) {
+        if (!avctx->config_avframe)
+            av_frame_free(&dst);
+
+        return ret;
+    }
+
+    avctx->config_avframe = dst;
+
+    return 0;
+}
+
 static unsigned bcd2uint(uint8_t bcd)
 {
     unsigned low  = bcd & 0xf;
