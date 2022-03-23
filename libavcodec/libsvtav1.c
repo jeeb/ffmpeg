@@ -238,6 +238,28 @@ static int config_enc_params(EbSvtAv1EncConfiguration *param,
     else
         param->color_range = !!(desc->flags & AV_PIX_FMT_FLAG_RGB);
 
+    for (int i = 0; i < avctx->nb_coded_side_data; i++) {
+        const AVPacketSideData *const sd = &avctx->coded_side_data[i];
+
+        av_log(avctx, AV_LOG_INFO, "ACHTUNG: %s\n",
+               av_packet_side_data_name(sd->type));
+    }
+
+    if (!avctx->config_avframe)
+        goto skip_side_data;
+
+    if (avctx->config_avframe) {
+        AVFrameSideData *sd = av_frame_get_side_data(avctx->config_avframe,
+                                                     AV_FRAME_DATA_CONTENT_LIGHT_LEVEL);
+        if (!sd)
+            goto skip_side_data;
+
+        av_log(avctx, AV_LOG_INFO, "ACHTUNG: %s\n",
+               av_frame_side_data_name(sd->type));
+    }
+
+skip_side_data:
+
     if (avctx->profile != FF_PROFILE_UNKNOWN)
         param->profile = avctx->profile;
 
