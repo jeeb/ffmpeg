@@ -3277,6 +3277,31 @@ static void init_encoder_time_base(OutputStream *ost, AVRational default_time_ba
     enc_ctx->time_base = default_time_base;
 }
 
+static void configure_encoder_side_data(AVCodecContext *enc, AVFrame *frame)
+{
+    static const struct sd_map {
+        enum AVPacketSideDataType packet;
+        enum AVFrameSideDataType frame;
+    } sd[] = {
+        { AV_PKT_DATA_MASTERING_DISPLAY_METADATA, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA },
+        { AV_PKT_DATA_CONTENT_LIGHT_LEVEL,        AV_FRAME_DATA_CONTENT_LIGHT_LEVEL },
+    };
+
+    if (!frame)
+        return;
+
+    for (int i = 0; i < FF_ARRAY_ELEMS(sd); i++) {
+        const struct sd_map map = sd[i];
+        AVPacketSideData *packet_sd = NULL;
+        AVFrameSideData  *frame_sd  = av_frame_get_side_data(frame, map.frame);
+        if (!frame_sd)
+            continue;
+
+        av_log(NULL, AV_LOG_INFO, "ffmpeg: %s\n",
+               av_frame_side_data_name(frame_sd->type));
+    }
+}
+
 static int init_output_stream_encode(OutputStream *ost, AVFrame *frame)
 {
     InputStream *ist = get_input_stream(ost);
@@ -3369,6 +3394,9 @@ static int init_output_stream_encode(OutputStream *ost, AVFrame *frame)
             enc_ctx->color_trc              = frame->color_trc;
             enc_ctx->colorspace             = frame->colorspace;
             enc_ctx->chroma_sample_location = frame->chroma_location;
+
+            // configure_encoder_side_data(enc_ctx, frame);
+            av_avctx_apply_config_avframe(enc_ctx, frame);
         }
 
         enc_ctx->framerate = ost->frame_rate;
