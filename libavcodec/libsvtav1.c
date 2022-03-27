@@ -156,6 +156,9 @@ static int config_enc_params(EbSvtAv1EncConfiguration *param,
     SvtContext *svt_enc = avctx->priv_data;
     const AVPixFmtDescriptor *desc;
     AVDictionaryEntry *en = NULL;
+    AVCPBProperties *cpb_props = ff_add_cpb_side_data(avctx);
+    if (!cpb_props)
+        return AVERROR(ENOMEM);
 
     // Update param from options
 #if FF_API_SVTAV1_OPTS
@@ -190,6 +193,10 @@ static int config_enc_params(EbSvtAv1EncConfiguration *param,
         param->rate_control_mode    = 0;
         param->enable_adaptive_quantization = 0;
     }
+
+    cpb_props->buffer_size = avctx->rc_buffer_size;
+    cpb_props->max_bitrate = avctx->rc_max_rate;
+    cpb_props->avg_bitrate = avctx->bit_rate;;
 
 #if SVT_AV1_CHECK_VERSION(0, 9, 1)
     while ((en = av_dict_get(svt_enc->svtav1_opts, "", en, AV_DICT_IGNORE_SUFFIX))) {
