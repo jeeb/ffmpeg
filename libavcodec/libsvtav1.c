@@ -271,7 +271,6 @@ static int config_enc_params(EbSvtAv1EncConfiguration *param,
         param->frame_rate_denominator = avctx->time_base.num * avctx->ticks_per_frame;
     }
 
-    avctx->bit_rate                 = param->target_bit_rate;
     if (avctx->bit_rate) {
         param->max_qp_allowed       = avctx->qmax;
         param->min_qp_allowed       = avctx->qmin;
