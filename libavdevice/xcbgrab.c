@@ -585,6 +585,8 @@ static int create_stream(AVFormatContext *s)
     if (ret < 0)
         return ret;
 
+    st->r_frame_rate = st->avg_frame_rate;
+
     avpriv_set_pts_info(st, 64, 1, 1000000);
 
     gc  = xcb_get_geometry(c->conn, c->window_id);
