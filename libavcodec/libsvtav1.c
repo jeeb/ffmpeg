@@ -273,7 +273,8 @@ static int config_enc_params(EbSvtAv1EncConfiguration *param,
         param->profile = FF_PROFILE_AV1_HIGH;
     }
 
-    avctx->bit_rate                 = param->target_bit_rate;
+    avctx->bit_rate = param->rate_control_mode > 0 ?
+                      param->target_bit_rate : 0;
 
     cpb_props->buffer_size = param->vbv_bufsize;
     cpb_props->max_bitrate = param->max_bit_rate;
