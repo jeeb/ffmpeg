@@ -699,6 +699,7 @@ SHLIBOBJS-$(CONFIG_FLV_MUXER)            += mpeg4audio_sample_rates.o
 SHLIBOBJS-$(CONFIG_HLS_DEMUXER)          += ac3_channel_layout_tab.o
 SHLIBOBJS-$(CONFIG_MATROSKA_DEMUXER)     += mpeg4audio_sample_rates.o
 SHLIBOBJS-$(CONFIG_MOV_DEMUXER)          += ac3_channel_layout_tab.o
+SHLIBOBJS-$(CONFIG_MOV_MUXER)            += ac3_bitrate_tab.o
 SHLIBOBJS-$(CONFIG_MP3_MUXER)            += mpegaudiotabs.o
 SHLIBOBJS-$(CONFIG_MXF_MUXER)            += golomb_tab.o
 SHLIBOBJS-$(CONFIG_NUT_MUXER)            += mpegaudiotabs.o
