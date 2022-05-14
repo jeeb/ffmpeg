@@ -28,6 +28,9 @@
 
 #include <stdint.h>
 
+#include "buffer.h"
+#include "dict.h"
+
 /**
  * @addtogroup lavu_video
  * @{
@@ -104,6 +107,20 @@ void av_display_rotation_set(int32_t matrix[9], double angle);
  * @param vflip whether the matrix should be flipped vertically
  */
 void av_display_matrix_flip(int32_t matrix[9], int hflip, int vflip);
+
+/**
+ * Allocate and initialize an AVBufferRef containing a transformation matrix.
+ *
+ * @param class AVClass utilized for logging
+ * @param out pointer to a pointer to an AVBufferRef, utilized for output if
+ *            successful
+ * @param args AVDictionary containing the arguments, currently the utilized
+ *             keys are "angle", "hflip" and "vflip". Angle is required, while
+ *             the rest are defaulted to zero if not set.
+ * @return zero if successful, nonzero if an error occurred.
+ */
+int ff_args_to_display_matrix(void *class, AVBufferRef **out,
+                              const AVDictionary *args);
 
 /**
  * @}

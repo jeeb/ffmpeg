@@ -19,11 +19,17 @@
  */
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
+#include "buffer.h"
+#include "dict.h"
 #include "display.h"
+#include "error.h"
+#include "eval.h"
 #include "libm.h"
+#include "log.h"
 #include "mathematics.h"
 
 // fixed point to double
@@ -71,4 +77,62 @@ void av_display_matrix_flip(int32_t matrix[9], int hflip, int vflip)
     if (hflip || vflip)
         for (i = 0; i < 9; i++)
             matrix[i] *= flip[i % 3];
+}
+
+int ff_args_to_display_matrix(void *class, AVBufferRef **out,
+                              const AVDictionary *args)
+{
+    double angle = 0.0f;
+    int hflip = 0;
+    int vflip = 0;
+
+    if (!args || !out)
+        return AVERROR(EINVAL);
+
+    // Parse options (maybe these should be AVOptions,
+    // but they require AVClass etc and this is a proof-of-concept...)
+    {
+        AVDictionaryEntry *en = av_dict_get(args, "angle", en, 0);
+        if (!en || !en->value || !*en->value) {
+            av_log(class, AV_LOG_ERROR,
+                   "%s angle set when creating display matrix!\n",
+                   !en ? "No" : "Empty");
+            return AVERROR(EINVAL);
+        }
+
+        angle = av_strtod(en->value, NULL);
+
+        if ((en = av_dict_get(args, "hflip", en, 0))) {
+            if (!en->value || !*en->value) {
+                av_log(class, AV_LOG_ERROR,
+                       "Empty hflip set for display matrix!\n");
+                return AVERROR(EINVAL);
+            }
+            hflip = !!atoi(en->value);
+        }
+
+        if ((en = av_dict_get(args, "vflip", en, 0))) {
+            if (!en->value || !*en->value) {
+                av_log(class, AV_LOG_ERROR,
+                       "Empty vflip set for display matrix!\n");
+                return AVERROR(EINVAL);
+            }
+            vflip = !!atoi(en->value);
+        }
+    }
+
+    // Actually create the AVBufferRef
+    {
+        AVBufferRef *buf = av_buffer_allocz(sizeof(int32_t) * 9);
+        if (!buf) {
+            return AVERROR(ENOMEM);
+        }
+
+        av_display_rotation_set((int32_t *)buf->data, angle);
+        av_display_matrix_flip((int32_t *)buf->data, hflip, vflip);
+
+        *out = buf;
+    }
+
+    return 0;
 }
