@@ -40,6 +40,7 @@ typedef struct SetParamsContext {
     int color_primaries;
     int color_trc;
     int colorspace;
+    AVDictionary *side_data_params;
 } SetParamsContext;
 
 #define OFFSET(x) offsetof(SetParamsContext, x)
@@ -115,6 +116,8 @@ static const AVOption setparams_options[] = {
     {"chroma-derived-nc",          NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_SPC_CHROMA_DERIVED_NCL},INT_MIN, INT_MAX, FLAGS, "colorspace"},
     {"chroma-derived-c",           NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_SPC_CHROMA_DERIVED_CL}, INT_MIN, INT_MAX, FLAGS, "colorspace"},
     {"ictcp",                      NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_SPC_ICTCP},             INT_MIN, INT_MAX, FLAGS, "colorspace"},
+
+    {"side_data", "add side data", OFFSET(side_data_params), AV_OPT_TYPE_DICT, { 0 }, 0, 0, FLAGS},
     {NULL}
 };
 
@@ -124,6 +127,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
 {
     AVFilterContext *ctx = inlink->dst;
     SetParamsContext *s = ctx->priv;
+    int ret = AVERROR_BUG;
 
     /* set field */
     if (s->field_mode == MODE_PROG) {
@@ -144,6 +148,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
         frame->color_trc = s->color_trc;
     if (s->colorspace >= 0)
         frame->colorspace = s->colorspace;
+
+    if ((ret = av_frame_apply_side_data_from_args(ctx, frame, s->side_data_params)) < 0) {
+        av_log(ctx, AV_LOG_ERROR, "Failed to add side data from arguments!\n");
+        return ret;
+    }
+
     return ff_filter_frame(ctx->outputs[0], frame);
 }
 
