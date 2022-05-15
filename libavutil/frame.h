@@ -940,6 +940,9 @@ int av_frame_apply_cropping(AVFrame *frame, int flags);
  */
 const char *av_frame_side_data_name(enum AVFrameSideDataType type);
 
+int av_frame_apply_side_data_from_args(void *class, AVFrame *frame,
+                                       AVDictionary *args);
+
 /**
  * @}
  */

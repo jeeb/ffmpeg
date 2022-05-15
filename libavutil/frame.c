@@ -22,6 +22,7 @@
 #include "common.h"
 #include "cpu.h"
 #include "dict.h"
+#include "display.h"
 #include "frame.h"
 #include "imgutils.h"
 #include "mem.h"
@@ -918,3 +919,59 @@ int av_frame_apply_cropping(AVFrame *frame, int flags)
 
     return 0;
 }
+
+struct side_data_constructor_mapping {
+    const char *name;
+    enum AVFrameSideDataType type;
+    int (*constructor)(void *class, AVBufferRef **out,
+                       const AVDictionary *args);
+};
+
+static const struct side_data_constructor_mapping side_data_constructor_map[] = {
+    {
+        "displaymatrix",
+        AV_FRAME_DATA_DISPLAYMATRIX,
+        ff_args_to_display_matrix,
+    }
+};
+
+int av_frame_apply_side_data_from_args(void *class, AVFrame *frame,
+                                       AVDictionary *args)
+{
+    if (!frame || !args)
+        return AVERROR(EINVAL);
+
+    if (!av_dict_count(args))
+        return 0;
+
+    for (int i = 0; i < FF_ARRAY_ELEMS(side_data_constructor_map); i++) {
+        AVBufferRef  *buf       = NULL;
+        AVDictionary *args_dict = NULL;
+        int ret = AVERROR_BUG;
+        struct side_data_constructor_mapping map =
+            side_data_constructor_map[0];
+        AVDictionaryEntry *en = av_dict_get(args, map.name, en, 0);
+        if (!en)
+            continue;
+
+        if ((ret = av_dict_parse_string(&args_dict, en->value, "=", ":", 0)) < 0)
+            goto loop_end;
+
+        if ((ret = map.constructor(class, &buf, args_dict)) < 0) {
+            goto loop_end;
+        }
+
+        if (!av_frame_new_side_data_from_buf(frame, map.type, buf)) {
+            av_buffer_unref(&buf);
+            ret = AVERROR(ENOMEM);
+        }
+
+loop_end:
+        av_dict_free(&args_dict);
+
+        if (ret < 0)
+            return ret;
+    }
+
+    return 0;
+};
