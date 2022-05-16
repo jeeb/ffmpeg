@@ -62,6 +62,7 @@
 #define SPECIFIER_OPT_FMT_ui64 "%"PRIu64
 #define SPECIFIER_OPT_FMT_f    "%f"
 #define SPECIFIER_OPT_FMT_dbl  "%lf"
+#define SPECIFIER_OPT_FMT_dict "%p"
 
 static const char *const opt_name_codec_names[]               = {"c", "codec", "acodec", "vcodec", "scodec", "dcodec", NULL};
 static const char *const opt_name_audio_channels[]            = {"ac", NULL};
@@ -208,11 +209,17 @@ static void uninit_options(OptionsContext *o)
                 av_freep(&(*so)[i].specifier);
                 if (po->flags & OPT_STRING)
                     av_freep(&(*so)[i].u.str);
+                else if (po->flags & OPT_DICT)
+                    av_dict_free(&(*so)[i].u.dict);
             }
             av_freep(so);
             *count = 0;
-        } else if (po->flags & OPT_OFFSET && po->flags & OPT_STRING)
-            av_freep(dst);
+        } else if (po->flags & OPT_OFFSET) {
+            if (po->flags & OPT_STRING)
+                av_freep(dst);
+            else if (po->flags & OPT_DICT)
+                av_dict_free((AVDictionary **)&dst);
+        }
         po++;
     }
 

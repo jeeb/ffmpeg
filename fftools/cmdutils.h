@@ -129,6 +129,7 @@ typedef struct SpecifierOpt {
         uint64_t ui64;
         float      f;
         double   dbl;
+        AVDictionary *dict;
     } u;
 } SpecifierOpt;
 
@@ -157,6 +158,7 @@ typedef struct OptionDef {
 #define OPT_DOUBLE 0x20000
 #define OPT_INPUT  0x40000
 #define OPT_OUTPUT 0x80000
+#define OPT_DICT  0x100000
      union {
         void *dst_ptr;
         int (*func_arg)(void *, const char *, const char *);
