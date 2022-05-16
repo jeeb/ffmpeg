@@ -128,6 +128,22 @@ int64_t parse_time_or_die(const char *context, const char *timestr,
     return us;
 }
 
+static AVDictionary *parse_dict_or_die(const char *context,
+                                       const char *dict_str)
+{
+    AVDictionary *dict = NULL;
+    int ret = av_dict_parse_string(&dict, dict_str, "=", ":", 0);
+    if (ret < 0) {
+        av_log(NULL, AV_LOG_FATAL,
+               "Failed to create a dictionary from '%s': %s!\n",
+               dict_str, av_err2str(ret));
+        exit_program(1);
+    }
+
+
+    return dict;
+}
+
 void show_help_options(const OptionDef *options, const char *msg, int req_flags,
                        int rej_flags, int alt_flags)
 {
@@ -285,6 +301,8 @@ static int write_option(void *optctx, const OptionDef *po, const char *opt,
         *(float *)dst = parse_number_or_die(opt, arg, OPT_FLOAT, -INFINITY, INFINITY);
     } else if (po->flags & OPT_DOUBLE) {
         *(double *)dst = parse_number_or_die(opt, arg, OPT_DOUBLE, -INFINITY, INFINITY);
+    } else if (po->flags & OPT_DICT) {
+        *(AVDictionary **)dst = parse_dict_or_die(opt, arg);
     } else if (po->u.func_arg) {
         int ret = po->u.func_arg(optctx, opt, arg);
         if (ret < 0) {
