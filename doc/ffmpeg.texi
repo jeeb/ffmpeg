@@ -897,6 +897,35 @@ If used together with @option{-vcodec copy}, it will affect the aspect ratio
 stored at container level, but not the aspect ratio stored in encoded
 frames, if it exists.
 
+@item -display_rotation[:@var{stream_specifier}] @var{rotation} (@emph{input/output,per-stream})
+Set the video display rotation in degrees specified by @var{rotation}.
+
+@var{rotation} is a floating point number that describes a pure
+counter-clockwise rotation in degrees.
+
+When setting this for input streams, @code{-autorotate} logic will be affected.
+For additional parameters affecting display matrix side data into which this
+information is saved, see @code{-display_hflip} and @code{-display_vflip}.
+
+These options work as a unit, so if only one of them is set, then the display
+matrix will be overridden to that specific value with the rest being set to
+default values.
+
+If unset, the default value if a display matrix is being defined is a rotation
+of zero degrees.
+
+@item -display_hflip[:@var{stream_specifier}] (@emph{input/output,per-stream})
+Set whether on display the image should be horizontally flipped.
+
+If unset, the default value if a display matrix is being defined is that there
+is no additional horizontal flip. See @code{-display_rotation}.
+
+@item -display_vflip[:@var{stream_specifier}] (@emph{input/output,per-stream})
+Set whether on display the image should be vertically flipped.
+
+If unset, the default value if a display matrix is being defined is that there
+is no additional vertical flip. See @code{-display_rotation}.
+
 @item -vn (@emph{input/output})
 As an input option, blocks all video streams of a file from being filtered or
 being automatically selected or mapped for any output. See @code{-discard}

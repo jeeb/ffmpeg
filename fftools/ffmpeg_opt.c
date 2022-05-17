@@ -20,6 +20,7 @@
 
 #include "config.h"
 
+#include <float.h>
 #include <stdint.h>
 
 #if HAVE_SYS_RESOURCE_H
@@ -43,6 +44,7 @@
 #include "libavutil/avutil.h"
 #include "libavutil/bprint.h"
 #include "libavutil/channel_layout.h"
+#include "libavutil/display.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/fifo.h"
 #include "libavutil/mathematics.h"
@@ -82,6 +84,9 @@ static const char *const opt_name_qscale[]                    = {"q", "qscale", 
 static const char *const opt_name_forced_key_frames[]         = {"forced_key_frames", NULL};
 static const char *const opt_name_force_fps[]                 = {"force_fps", NULL};
 static const char *const opt_name_frame_aspect_ratios[]       = {"aspect", NULL};
+static const char *const opt_name_display_rotations[]         = {"display_rotation", NULL};
+static const char *const opt_name_display_hflips[]            = {"display_hflip", NULL};
+static const char *const opt_name_display_vflips[]            = {"display_vflip", NULL};
 static const char *const opt_name_rc_overrides[]              = {"rc_override", NULL};
 static const char *const opt_name_intra_matrices[]            = {"intra_matrix", NULL};
 static const char *const opt_name_inter_matrices[]            = {"inter_matrix", NULL};
@@ -739,6 +744,39 @@ static int opt_recording_timestamp(void *optctx, const char *opt, const char *ar
     return 0;
 }
 
+static void add_display_matrix_to_stream(OptionsContext *o,
+                                         AVFormatContext *ctx, AVStream *st)
+{
+    double display_rotation = DBL_MAX;
+    int hflip = -1, vflip = -1,
+        hflip_set = 0, vflip_set = 0, display_rotation_set = 0;
+    uint8_t *buf = NULL;
+
+    MATCH_PER_STREAM_OPT(display_rotations, dbl, display_rotation, ctx, st);
+    MATCH_PER_STREAM_OPT(display_hflips,    i,   hflip,            ctx, st);
+    MATCH_PER_STREAM_OPT(display_vflips,    i,   vflip,            ctx, st);
+
+    display_rotation_set = display_rotation != DBL_MAX;
+    hflip_set            = hflip != -1;
+    vflip_set            = vflip != -1;
+
+    if (!display_rotation_set && !hflip_set && !vflip_set)
+        return;
+
+    if (!(buf = av_stream_new_side_data(st, AV_PKT_DATA_DISPLAYMATRIX,
+                                        sizeof(int32_t) * 9))) {
+        av_log(NULL, AV_LOG_FATAL, "Failed to generate a display matrix!\n");
+        exit_program(1);
+    }
+
+    av_display_rotation_set((int32_t *)buf,
+                            display_rotation_set ? -display_rotation :
+                                                   -0.0f);
+    av_display_matrix_flip((int32_t *)buf,
+                           hflip_set ? hflip : 0,
+                           vflip_set ? vflip : 0);
+}
+
 static const AVCodec *find_codec_or_die(const char *name, enum AVMediaType type, int encoder)
 {
     const AVCodecDescriptor *desc;
@@ -892,6 +930,8 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
 
             ist->top_field_first = -1;
             MATCH_PER_STREAM_OPT(top_field_first, i, ist->top_field_first, ic, st);
+
+            add_display_matrix_to_stream(o, ic, st);
 
             MATCH_PER_STREAM_OPT(hwaccels, str, hwaccel, ic, st);
             MATCH_PER_STREAM_OPT(hwaccel_output_formats, str,
@@ -1751,6 +1791,8 @@ static OutputStream *new_video_stream(OptionsContext *o, AVFormatContext *oc, in
         }
         ost->frame_aspect_ratio = q;
     }
+
+    add_display_matrix_to_stream(o, oc, st);
 
     MATCH_PER_STREAM_OPT(filter_scripts, str, ost->filters_script, oc, st);
     MATCH_PER_STREAM_OPT(filters,        str, ost->filters,        oc, st);
@@ -3731,6 +3773,16 @@ const OptionDef options[] = {
     { "aspect",       OPT_VIDEO | HAS_ARG  | OPT_STRING | OPT_SPEC |
                       OPT_OUTPUT,                                                { .off = OFFSET(frame_aspect_ratios) },
         "set aspect ratio (4:3, 16:9 or 1.3333, 1.7777)", "aspect" },
+    { "display_rotation", OPT_VIDEO | HAS_ARG | OPT_DOUBLE | OPT_SPEC | OPT_INPUT |
+                          OPT_OUTPUT,                                            { .off = OFFSET(display_rotations) },
+        "set pure counter-clockwise rotation in degrees for stream(s)",
+        "rotation" },
+    { "display_hflip", OPT_VIDEO | OPT_BOOL | OPT_SPEC | OPT_INPUT | OPT_OUTPUT, { .off = OFFSET(display_hflips) },
+        "set display horizontal flip for stream(s) "
+        "(overrides any display rotation if it is not set)"},
+    { "display_vflip", OPT_VIDEO | OPT_BOOL | OPT_SPEC | OPT_INPUT | OPT_OUTPUT, { .off = OFFSET(display_vflips) },
+        "set display vertical flip for stream(s) "
+        "(overrides any display rotation if it is not set)"},
     { "pix_fmt",      OPT_VIDEO | HAS_ARG | OPT_EXPERT  | OPT_STRING | OPT_SPEC |
                       OPT_INPUT | OPT_OUTPUT,                                    { .off = OFFSET(frame_pix_fmts) },
         "set pixel format", "format" },
