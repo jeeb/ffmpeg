@@ -47,6 +47,8 @@
 
 #include "libswresample/swresample.h"
 
+#define FFMPEG_ROTATION_METADATA 1
+
 enum VideoSyncMethod {
     VSYNC_AUTO = -1,
     VSYNC_PASSTHROUGH,
@@ -497,10 +499,14 @@ typedef struct OutputStream {
     int is_cfr;
     int force_fps;
     int top_field_first;
+#if FFMPEG_ROTATION_METADATA
     int rotate_overridden;
+#endif
     int autoscale;
     int bits_per_raw_sample;
+#if FFMPEG_ROTATION_METADATA
     double rotate_override_value;
+#endif
 
     AVRational frame_aspect_ratio;
 
