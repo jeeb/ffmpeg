@@ -89,6 +89,7 @@ static const char *const opt_name_forced_key_frames[]         = {"forced_key_fra
 static const char *const opt_name_fps_mode[]                  = {"fps_mode", NULL};
 static const char *const opt_name_force_fps[]                 = {"force_fps", NULL};
 static const char *const opt_name_frame_aspect_ratios[]       = {"aspect", NULL};
+static const char *const opt_name_display_matrixes[]          = {"display_matrix", NULL};
 static const char *const opt_name_display_rotations[]         = {"display_rotation", NULL};
 static const char *const opt_name_display_hflips[]            = {"display_hflip", NULL};
 static const char *const opt_name_display_vflips[]            = {"display_vflip", NULL};
@@ -843,18 +844,77 @@ static int opt_recording_timestamp(void *optctx, const char *opt, const char *ar
 static void add_display_matrix_to_stream(OptionsContext *o,
                                          AVFormatContext *ctx, AVStream *st)
 {
-    double display_rotation = DBL_MAX;
-    int hflip = -1, vflip = -1,
-        hflip_set = 0, vflip_set = 0, display_rotation_set = 0;
+    struct DisplayMatrixOpts {
+        const AVClass *class;
+        double  rotation;
+        int     hflip;
+        int     vflip;
+    };
+    int hflip_set = 0, vflip_set = 0, display_rotation_set = 0;
     uint8_t *buf = NULL;
 
-    MATCH_PER_STREAM_OPT(display_rotations, dbl, display_rotation, ctx, st);
-    MATCH_PER_STREAM_OPT(display_hflips,    i,   hflip,            ctx, st);
-    MATCH_PER_STREAM_OPT(display_vflips,    i,   vflip,            ctx, st);
+#define OFFSET(x) offsetof(struct DisplayMatrixOpts, x)
+    static const AVOption opts[] = {
+        { "rotation", NULL, OFFSET(rotation), AV_OPT_TYPE_DOUBLE,
+            { .dbl = DBL_MAX }, -(DBL_MAX), DBL_MAX - 1.0f},
+        { "hflip",    NULL, OFFSET(hflip),    AV_OPT_TYPE_BOOL,
+            { .i64 = -1 }, 0, 1},
+        { "vflip",    NULL, OFFSET(vflip),    AV_OPT_TYPE_BOOL,
+            { .i64 = -1 }, 0, 1},
+        { NULL },
+    };
+    static const AVClass class = {
+        .class_name = "ffmpeg",
+        .item_name  = av_default_item_name,
+        .option     = opts,
+        .version    = LIBAVUTIL_VERSION_INT,
+    };
+    const AVClass *pclass = &class;
+    static struct DisplayMatrixOpts test_args = {
+        .class    = &class,
+        .rotation = DBL_MAX,
+        .hflip    = -1,
+        .vflip    = -1,
+    };
+#undef OFFSET
 
-    display_rotation_set = display_rotation != DBL_MAX;
-    hflip_set            = hflip != -1;
-    vflip_set            = vflip != -1;
+    AVDictionary *global_args = NULL;
+    AVDictionary *local_args  = NULL;
+    AVDictionaryEntry *en = NULL;
+
+    MATCH_PER_STREAM_OPT(display_matrixes, dict, global_args, ctx, st);
+
+    if (!global_args)
+        return;
+
+    // make a copy of the dict so it doesn't get freed from underneath us
+    if (av_dict_copy(&local_args, global_args, 0) < 0) {
+        av_log(NULL, AV_LOG_FATAL,
+               "Failed to copy argument dict for display matrix!\n");
+    }
+
+    if (av_opt_set_dict2(&test_args, &local_args, 0) < 0) {
+        av_log(NULL, AV_LOG_FATAL,
+               "Failed to set options for a display matrix!\n");
+        exit_program(1);
+    }
+
+    while ((en = av_dict_get(local_args, "", en, AV_DICT_IGNORE_SUFFIX))) {
+        av_log(NULL, AV_LOG_FATAL,
+               "Unknown option=value pair for display matrix: "
+               "key: '%s', value: '%s'!\n",
+               en->key, en->value);
+    }
+
+    if (av_dict_count(local_args)) {
+        exit_program(1);
+    }
+
+    av_dict_free(&local_args);
+
+    display_rotation_set = test_args.rotation != DBL_MAX;
+    hflip_set            = test_args.hflip != -1;
+    vflip_set            = test_args.vflip != -1;
 
     if (!display_rotation_set && !hflip_set && !vflip_set)
         return;
@@ -866,11 +926,11 @@ static void add_display_matrix_to_stream(OptionsContext *o,
     }
 
     av_display_rotation_set((int32_t *)buf,
-                            display_rotation_set ? -display_rotation :
+                            display_rotation_set ? -(test_args.rotation) :
                                                    -0.0f);
     av_display_matrix_flip((int32_t *)buf,
-                           hflip_set ? hflip : 0,
-                           vflip_set ? vflip : 0);
+                           hflip_set ? test_args.hflip : 0,
+                           vflip_set ? test_args.vflip : 0);
 }
 
 static const AVCodec *find_codec_or_die(const char *name, enum AVMediaType type, int encoder)
@@ -4046,6 +4106,11 @@ const OptionDef options[] = {
     { "aspect",       OPT_VIDEO | HAS_ARG  | OPT_STRING | OPT_SPEC |
                       OPT_OUTPUT,                                                { .off = OFFSET(frame_aspect_ratios) },
         "set aspect ratio (4:3, 16:9 or 1.3333, 1.7777)", "aspect" },
+    { "display_matrix", OPT_VIDEO | HAS_ARG | OPT_DICT | OPT_SPEC | OPT_INPUT |
+                        OPT_OUTPUT,                                              { .off = OFFSET(display_matrixes) },
+        "define a display matrix with rotation and/or horizontal/vertical "
+        "flip for stream(s)",
+        "arguments" },
     { "display_rotation", OPT_VIDEO | HAS_ARG | OPT_DOUBLE | OPT_SPEC | OPT_INPUT |
                           OPT_OUTPUT,                                            { .off = OFFSET(display_rotations) },
         "set pure counter-clockwise rotation in degrees for stream(s)",

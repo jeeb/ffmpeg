@@ -194,6 +194,8 @@ typedef struct OptionsContext {
     int        nb_force_fps;
     SpecifierOpt *frame_aspect_ratios;
     int        nb_frame_aspect_ratios;
+    SpecifierOpt *display_matrixes;
+    int        nb_display_matrixes;
     SpecifierOpt *display_rotations;
     int        nb_display_rotations;
     SpecifierOpt *display_hflips;
