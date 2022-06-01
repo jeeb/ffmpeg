@@ -443,7 +443,8 @@ static int handle_eac3(MOVMuxContext *mov, AVPacket *pkt, MOVTrack *track)
 
         /* this should always be the case, given that our AC-3 parser
          * concatenates dependent frames to their independent parent */
-        if (hdr->frame_type == EAC3_FRAME_TYPE_INDEPENDENT) {
+        if (hdr->frame_type == EAC3_FRAME_TYPE_INDEPENDENT ||
+            hdr->frame_type == EAC3_FRAME_TYPE_AC3_CONVERT) {
             /* substream ids must be incremental */
             if (hdr->substreamid > info->num_ind_sub + 1) {
                 ret = AVERROR(EINVAL);
@@ -474,6 +475,14 @@ static int handle_eac3(MOVMuxContext *mov, AVPacket *pkt, MOVTrack *track)
         info->substream[hdr->substreamid].bsmod = hdr->bitstream_mode;
         info->substream[hdr->substreamid].acmod = hdr->channel_mode;
         info->substream[hdr->substreamid].lfeon = hdr->lfe_on;
+
+        if (track->par->codec_id == AV_CODEC_ID_AC3) {
+            // with AC-3 we only require the information of a single packet,
+            // so we can finish as soon as the basic values of the bit stream
+            // have been set to the track's informational structure.
+            info->ec3_done = 1;
+            goto concatenate;
+        }
 
         /* Parse dependent substream(s), if any */
         if (pkt->size != hdr->frame_size) {
