@@ -70,6 +70,7 @@ int ff_ac3_parse_header(GetBitContext *gbc, AC3HeaderInfo *hdr)
         return AAC_AC3_PARSE_ERROR_BSID;
 
     hdr->num_blocks = 6;
+    hdr->ac3_bit_rate_code = -1;
 
     /* set default mix levels */
     hdr->center_mix_level   = 5;  // -4.5dB
@@ -88,6 +89,8 @@ int ff_ac3_parse_header(GetBitContext *gbc, AC3HeaderInfo *hdr)
         frame_size_code = get_bits(gbc, 6);
         if(frame_size_code > 37)
             return AAC_AC3_PARSE_ERROR_FRAME_SIZE;
+
+        hdr->ac3_bit_rate_code = (frame_size_code >> 1);
 
         skip_bits(gbc, 5); // skip bsid, already got it
 
