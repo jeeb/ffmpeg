@@ -94,12 +94,6 @@ const uint8_t ff_ac3_dec_channel_map[8][2][6] = {
 /* possible frequencies */
 const int ff_ac3_sample_rate_tab[] = { 48000, 44100, 32000, 0 };
 
-/* possible bitrates */
-const uint16_t ff_ac3_bitrate_tab[19] = {
-    32, 40, 48, 56, 64, 80, 96, 112, 128,
-    160, 192, 224, 256, 320, 384, 448, 512, 576, 640
-};
-
 /**
  * Table of bin locations for rematrixing bands
  * reference: Section 7.5.2 Rematrixing : Frequency Band Definitions
