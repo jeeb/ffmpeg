@@ -34,6 +34,7 @@
 #include "libavutil/dict.h"
 #include "libavutil/frame.h"
 #include "libavutil/log.h"
+#include "libavutil/mastering_display_metadata.h"
 #include "libavutil/pixfmt.h"
 #include "libavutil/rational.h"
 
@@ -2057,6 +2058,14 @@ typedef struct AVCodecContext {
      *             The decoder can then override during decoding as needed.
      */
     AVChannelLayout ch_layout;
+
+    /**
+     * Static metadata utilized for HDR content as part of HDR10
+     * - encoding: set by user
+     * - decoding: unused
+     */
+    AVContentLightMetadata     *content_light_level;
+    AVMasteringDisplayMetadata *mastering_display_colour_volume;
 } AVCodecContext;
 
 /**

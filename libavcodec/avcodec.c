@@ -501,6 +501,9 @@ av_cold int avcodec_close(AVCodecContext *avctx)
     } else if (av_codec_is_decoder(avctx->codec))
         av_freep(&avctx->subtitle_header);
 
+    av_freep(&avctx->content_light_level);
+    av_freep(&avctx->mastering_display_colour_volume);
+
     avctx->codec = NULL;
     avctx->active_thread_type = 0;
 
