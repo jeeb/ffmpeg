@@ -24,6 +24,7 @@
 #include <EbSvtAv1ErrorCodes.h>
 #include <EbSvtAv1Enc.h>
 
+#include "libavutil/bswap.h"
 #include "libavutil/common.h"
 #include "libavutil/frame.h"
 #include "libavutil/imgutils.h"
@@ -231,6 +232,13 @@ static int config_enc_params(EbSvtAv1EncConfiguration *param,
         }
     }
 #endif
+
+    if (avctx->content_light_level) {
+        param->content_light_level.max_cll  =
+            AV_BSWAP16C(avctx->content_light_level->MaxCLL);
+        param->content_light_level.max_fall =
+            AV_BSWAP16C(avctx->content_light_level->MaxFALL);
+    }
 
     if (avctx->profile != FF_PROFILE_UNKNOWN)
         param->profile = avctx->profile;
