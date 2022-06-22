@@ -714,13 +714,38 @@ int ff_decode_receive_frame(AVCodecContext *avctx, AVFrame *frame)
     }
 
     if (avctx->codec_type == AVMEDIA_TYPE_VIDEO) {
+        AVFrameSideData *sd = NULL;
         ret = apply_cropping(avctx, frame);
         if (ret < 0) {
             av_frame_unref(frame);
             return ret;
         }
+
+        if (avctx->frame_number != 0)
+            goto skip_static_side_data_transfer;
+
+        if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL))) {
+            AVContentLightMetadata *clli = (AVContentLightMetadata *)sd->data;
+            ret = av_content_light_metadata_copy(&avctx->content_light_level,
+                                                &clli);
+            if (ret < 0) {
+                av_frame_unref(frame);
+                return ret;
+            }
+        }
+
+        if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA))) {
+            AVMasteringDisplayMetadata *mdcv = (AVMasteringDisplayMetadata *)sd->data;
+            ret = av_mastering_display_metadata_copy(
+                &avctx->mastering_display_colour_volume, &mdcv);
+            if (ret < 0) {
+                av_frame_unref(frame);
+                return ret;
+            }
+        }
     }
 
+skip_static_side_data_transfer:
     avctx->frame_number++;
 
     if (avctx->flags & AV_CODEC_FLAG_DROPCHANGED) {
