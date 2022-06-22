@@ -125,4 +125,10 @@ AVContentLightMetadata *av_content_light_metadata_alloc(size_t *size);
  */
 AVContentLightMetadata *av_content_light_metadata_create_side_data(AVFrame *frame);
 
+int av_mastering_display_metadata_copy(AVMasteringDisplayMetadata **dst,
+                                       AVMasteringDisplayMetadata *const *src);
+
+int av_content_light_metadata_copy(AVContentLightMetadata **dst,
+                                   AVContentLightMetadata *const *src);
+
 #endif /* AVUTIL_MASTERING_DISPLAY_METADATA_H */

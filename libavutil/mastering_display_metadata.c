@@ -64,3 +64,55 @@ AVContentLightMetadata *av_content_light_metadata_create_side_data(AVFrame *fram
 
     return (AVContentLightMetadata *)side_data->data;
 }
+
+int av_mastering_display_metadata_copy(AVMasteringDisplayMetadata **dst,
+                                       AVMasteringDisplayMetadata *const *src)
+{
+    if (!dst)
+        return AVERROR(EINVAL);
+
+    if (!src || !*src) {
+        if (*dst)
+            av_freep(dst);
+
+        return 0;
+    }
+
+    if (*src == *dst)
+        return AVERROR(EINVAL);
+
+    if (!*dst &&
+        !(*dst = av_mastering_display_metadata_alloc()))
+        return AVERROR(ENOMEM);
+
+    memcpy(*dst, *src, sizeof(AVMasteringDisplayMetadata));
+
+    return 0;
+}
+
+int av_content_light_metadata_copy(AVContentLightMetadata **dst,
+                                   AVContentLightMetadata *const *src)
+{
+    size_t size = 0;
+
+    if (!dst)
+        return AVERROR(EINVAL);
+
+    if (!src || !*src) {
+        if (*dst)
+            av_freep(dst);
+
+        return 0;
+    }
+
+    if (*src == *dst)
+        return AVERROR(EINVAL);
+
+    if (!*dst &&
+        !(*dst = av_content_light_metadata_alloc(&size)))
+        return AVERROR(ENOMEM);
+
+    memcpy(*dst, *src, size);
+
+    return 0;
+}
