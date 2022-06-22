@@ -25,6 +25,7 @@
 
 #include "libavutil/avutil.h"
 #include "libavutil/channel_layout.h"
+#include "libavutil/mastering_display_metadata.h"
 #include "libavutil/rational.h"
 #include "libavutil/pixfmt.h"
 
@@ -211,6 +212,12 @@ typedef struct AVCodecParameters {
      * Audio only. The channel layout and number of channels.
      */
     AVChannelLayout ch_layout;
+
+    /**
+     * Video only. Static metadata utilized for HDR content as part of HDR10
+     */
+    AVContentLightMetadata     *content_light_level;
+    AVMasteringDisplayMetadata *mastering_display_colour_volume;
 } AVCodecParameters;
 
 /**

@@ -32,6 +32,8 @@ static void codec_parameters_reset(AVCodecParameters *par)
 {
     av_freep(&par->extradata);
     av_channel_layout_uninit(&par->ch_layout);
+    av_freep(&par->content_light_level);
+    av_freep(&par->mastering_display_colour_volume);
 
     memset(par, 0, sizeof(*par));
 
@@ -89,6 +91,17 @@ int avcodec_parameters_copy(AVCodecParameters *dst, const AVCodecParameters *src
         dst->extradata_size = src->extradata_size;
     }
 
+    ret = av_content_light_metadata_copy(&dst->content_light_level,
+                                         &src->content_light_level);
+    if (ret < 0)
+        return ret;
+
+    ret = av_mastering_display_metadata_copy(
+        &dst->mastering_display_colour_volume,
+        &src->mastering_display_colour_volume);
+    if (ret < 0)
+        return ret;
+
     ret = av_channel_layout_copy(&dst->ch_layout, &src->ch_layout);
     if (ret < 0)
         return ret;
@@ -126,6 +139,18 @@ int avcodec_parameters_from_context(AVCodecParameters *par,
         par->chroma_location     = codec->chroma_sample_location;
         par->sample_aspect_ratio = codec->sample_aspect_ratio;
         par->video_delay         = codec->has_b_frames;
+
+        ret = av_content_light_metadata_copy(&par->content_light_level,
+                                             &codec->content_light_level);
+        if (ret < 0)
+            return ret;
+
+        ret = av_mastering_display_metadata_copy(
+            &par->mastering_display_colour_volume,
+            &codec->mastering_display_colour_volume);
+        if (ret < 0)
+            return ret;
+
         break;
     case AVMEDIA_TYPE_AUDIO:
         par->format           = codec->sample_fmt;
@@ -207,6 +232,17 @@ int avcodec_parameters_to_context(AVCodecContext *codec,
         codec->chroma_sample_location = par->chroma_location;
         codec->sample_aspect_ratio    = par->sample_aspect_ratio;
         codec->has_b_frames           = par->video_delay;
+
+        ret = av_content_light_metadata_copy(&codec->content_light_level,
+                                             &par->content_light_level);
+        if (ret < 0)
+            return ret;
+
+        ret = av_mastering_display_metadata_copy(
+            &codec->mastering_display_colour_volume,
+            &par->mastering_display_colour_volume);
+        if (ret < 0)
+            return ret;
         break;
     case AVMEDIA_TYPE_AUDIO:
         codec->sample_fmt       = par->format;
