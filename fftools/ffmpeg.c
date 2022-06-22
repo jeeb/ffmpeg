@@ -2948,11 +2948,29 @@ static int init_output_stream_encode(OutputStream *ost, AVFrame *frame)
                                                  av_pix_fmt_desc_get(enc_ctx->pix_fmt)->comp[0].depth);
 
         if (frame) {
+            AVFrameSideData *sd = NULL;
+
             enc_ctx->color_range            = frame->color_range;
             enc_ctx->color_primaries        = frame->color_primaries;
             enc_ctx->color_trc              = frame->color_trc;
             enc_ctx->colorspace             = frame->colorspace;
             enc_ctx->chroma_sample_location = frame->chroma_location;
+
+            if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL))) {
+                AVContentLightMetadata *clli = (AVContentLightMetadata *)sd->data;
+                ret = av_content_light_metadata_copy(&enc_ctx->content_light_level,
+                                                     &clli);
+                if (ret < 0)
+                    return ret;
+            }
+
+            if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA))) {
+                AVMasteringDisplayMetadata *mdcv = (AVMasteringDisplayMetadata *)sd->data;
+                ret = av_mastering_display_metadata_copy(
+                    &enc_ctx->mastering_display_colour_volume, &mdcv);
+                if (ret < 0)
+                    return ret;
+            }
         }
 
         enc_ctx->framerate = ost->frame_rate;
