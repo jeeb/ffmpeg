@@ -224,6 +224,8 @@ typedef struct OptionsContext {
     int        nb_reinit_filters;
     SpecifierOpt *fix_sub_duration;
     int        nb_fix_sub_duration;
+    SpecifierOpt *fix_sub_duration_heartbeat;
+    int        nb_fix_sub_duration_heartbeat;
     SpecifierOpt *canvas_sizes;
     int        nb_canvas_sizes;
     SpecifierOpt *pass;
@@ -625,6 +627,12 @@ typedef struct OutputStream {
 
     int sq_idx_encode;
     int sq_idx_mux;
+
+    /*
+     * bool on whether this stream should be utilized for splitting
+     * subtitles utilizing fix_sub_duration at random access points.
+     */
+    unsigned int fix_sub_duration_heartbeat;
 } OutputStream;
 
 typedef struct OutputFile {
