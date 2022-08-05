@@ -2349,8 +2349,6 @@ static int process_subtitle(InputStream *ist, AVSubtitle *subtitle, int *got_out
     if (!subtitle->num_rects)
         goto out;
 
-    ist->frames_decoded++;
-
     for (int i = 0; i < nb_output_streams; i++) {
         OutputStream *ost = output_streams[i];
 
@@ -2382,6 +2380,8 @@ static int transcode_subtitles(InputStream *ist, AVPacket *pkt, int *got_output,
             sub2video_flush(ist);
         return ret;
     }
+
+    ist->frames_decoded++;
 
     return process_subtitle(ist, &subtitle, got_output);
 }
