@@ -235,11 +235,8 @@ static int libplacebo_init(AVFilterContext *avctx)
 
 static int init_vulkan(AVFilterContext *avctx)
 {
-    int err = 0;
     LibplaceboContext *s = avctx->priv;
     const AVVulkanDeviceContext *hwctx = s->vkctx.hwctx;
-    uint8_t *buf = NULL;
-    size_t buf_len;
 
     /* Import libavfilter vulkan context into libplacebo */
     s->vulkan = pl_vulkan_import(s->log, pl_vulkan_import_params(
@@ -268,12 +265,24 @@ static int init_vulkan(AVFilterContext *avctx)
 
     if (!s->vulkan) {
         av_log(s, AV_LOG_ERROR, "Failed importing vulkan device to libplacebo!\n");
-        err = AVERROR_EXTERNAL;
-        goto fail;
+        return AVERROR_EXTERNAL;
     }
 
     /* Create the renderer */
     s->gpu = s->vulkan->gpu;
+
+    return 0;
+}
+
+static int init_graphics_api(AVFilterContext *avctx)
+{
+    int err = 0;
+    LibplaceboContext *s = avctx->priv;
+    uint8_t *buf = NULL;
+    size_t buf_len;
+
+    RET(init_vulkan(avctx));
+
     s->renderer = pl_renderer_create(s->log, s->gpu);
 
     /* Parse the user shaders, if requested */
@@ -453,7 +462,7 @@ static int filter_frame(AVFilterLink *link, AVFrame *in)
 
     pl_log_level_update(s->log, get_log_level());
     if (!s->initialized)
-        RET(init_vulkan(ctx));
+        RET(init_graphics_api(ctx));
 
     RET(av_frame_copy_props(out, in));
     out->width = outlink->w;
