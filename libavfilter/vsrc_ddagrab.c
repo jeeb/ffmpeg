@@ -683,6 +683,9 @@ static av_cold int init_hwframes_ctx(AVFilterContext *avctx)
         return AVERROR_BUG;
     }
 
+    // required for the texture to be considered sample'able
+    dda->frames_hwctx->BindFlags |= D3D11_BIND_SHADER_RESOURCE;
+
     if (dda->draw_mouse)
         dda->frames_hwctx->BindFlags |= D3D11_BIND_RENDER_TARGET;
 
