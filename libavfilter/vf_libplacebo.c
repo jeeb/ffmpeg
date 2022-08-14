@@ -687,6 +687,14 @@ static int libplacebo_config_output(AVFilterLink *outlink)
         }
         break;
     case AV_PIX_FMT_D3D11:
+        {
+            AVD3D11VAFramesContext *d3d11vactx = NULL;
+            hwfc = (AVHWFramesContext *) outlink->hw_frames_ctx->data;
+            d3d11vactx = hwfc->hwctx;
+            // we get complaints about renderable|sampleable, so add flags
+            d3d11vactx->BindFlags |=
+                (D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
+        }
         break;
     default:
         av_log(avctx, AV_LOG_ERROR, "brrr\n");
