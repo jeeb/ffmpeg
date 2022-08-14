@@ -17,6 +17,7 @@
  */
 
 #include "libavutil/file.h"
+#include "libavutil/hwcontext_d3d11va.h"
 #include "libavutil/opt.h"
 #include "internal.h"
 #include "vulkan_filter.h"
@@ -24,6 +25,7 @@
 
 #include <libplacebo/renderer.h>
 #include <libplacebo/utils/libav.h>
+#include <libplacebo/d3d11.h>
 #include <libplacebo/vulkan.h>
 
 enum {
@@ -54,13 +56,12 @@ static const struct pl_tone_map_function * const tonemapping_funcs[TONE_MAP_COUN
 };
 
 typedef struct LibplaceboContext {
-    /* lavfi vulkan*/
+    /* lavfi vulkan/d3d11 */
     FFVulkanContext vkctx;
     int initialized;
 
     /* libplacebo */
     pl_log log;
-    pl_vulkan vulkan;
     pl_gpu gpu;
     pl_renderer renderer;
 
@@ -233,13 +234,34 @@ static int libplacebo_init(AVFilterContext *avctx)
     return 0;
 }
 
+static int init_d3d11(AVFilterContext *avctx)
+{
+    LibplaceboContext *s = avctx->priv;
+    AVD3D11VADeviceContext *hwctx = (AVD3D11VADeviceContext *)s->vkctx.hwctx;
+
+    pl_d3d11 d3d11 = pl_d3d11_create(s->log,
+        pl_d3d11_params(
+            .device = hwctx->device,
+        )
+    );
+
+    if (!d3d11) {
+        av_log(s, AV_LOG_ERROR, "Failed importing d3d11 device to libplacebo!\n");
+        return AVERROR_EXTERNAL;
+    }
+
+    s->gpu = d3d11->gpu;
+
+    return 0;
+}
+
 static int init_vulkan(AVFilterContext *avctx)
 {
     LibplaceboContext *s = avctx->priv;
     const AVVulkanDeviceContext *hwctx = s->vkctx.hwctx;
 
     /* Import libavfilter vulkan context into libplacebo */
-    s->vulkan = pl_vulkan_import(s->log, pl_vulkan_import_params(
+    pl_vulkan vulkan = pl_vulkan_import(s->log, pl_vulkan_import_params(
         .instance       = hwctx->inst,
         .get_proc_addr  = hwctx->get_proc_addr,
         .phys_device    = hwctx->phys_dev,
@@ -263,13 +285,13 @@ static int init_vulkan(AVFilterContext *avctx)
         .max_api_version = VK_API_VERSION_1_2,
     ));
 
-    if (!s->vulkan) {
+    if (!vulkan) {
         av_log(s, AV_LOG_ERROR, "Failed importing vulkan device to libplacebo!\n");
         return AVERROR_EXTERNAL;
     }
 
     /* Create the renderer */
-    s->gpu = s->vulkan->gpu;
+    s->gpu = vulkan->gpu;
 
     return 0;
 }
@@ -278,10 +300,23 @@ static int init_graphics_api(AVFilterContext *avctx)
 {
     int err = 0;
     LibplaceboContext *s = avctx->priv;
+    AVHWFramesContext *hwfc = (AVHWFramesContext *)s->vkctx.frames_ref->data;
     uint8_t *buf = NULL;
     size_t buf_len;
 
-    RET(init_vulkan(avctx));
+    av_log(avctx, AV_LOG_VERBOSE, "Entered %s\n",
+           __func__);
+
+    switch (hwfc->format) {
+    case AV_PIX_FMT_VULKAN:
+        RET(init_vulkan(avctx));
+        break;
+    case AV_PIX_FMT_D3D11:
+        RET(init_d3d11(avctx));
+        break;
+    default:
+        return AVERROR(EINVAL);
+    }
 
     s->renderer = pl_renderer_create(s->log, s->gpu);
 
@@ -309,7 +344,20 @@ static void libplacebo_uninit(AVFilterContext *avctx)
     for (int i = 0; i < s->num_hooks; i++)
         pl_mpv_user_shader_destroy(&s->hooks[i]);
     pl_renderer_destroy(&s->renderer);
-    pl_vulkan_destroy(&s->vulkan);
+
+    if (s->gpu) {
+        pl_vulkan vulkan = pl_vulkan_get(s->gpu);
+        pl_d3d11  d3d11  = pl_d3d11_get(s->gpu);
+
+        if (vulkan) {
+            pl_vulkan_destroy(&vulkan);
+        }
+
+        if (d3d11) {
+            pl_d3d11_destroy(&d3d11);
+        }
+    }
+
     pl_log_destroy(&s->log);
     ff_vk_uninit(&s->vkctx);
     s->initialized = 0;
@@ -514,14 +562,82 @@ fail:
     return err;
 }
 
+static const enum AVPixelFormat pix_fmts[] = {
+    AV_PIX_FMT_VULKAN,   AV_PIX_FMT_D3D11,
+    AV_PIX_FMT_NONE
+};
+
+static int init_d3d11_input(AVFilterLink *inlink)
+{
+    AVFilterContext *avctx = inlink->dst;
+    FFVulkanContext *s = &((LibplaceboContext *)avctx->priv)->vkctx;
+    AVHWFramesContext *input_frames =
+        (AVHWFramesContext *)inlink->hw_frames_ctx->data;
+
+    int err = AVERROR_BUG;
+
+    if (input_frames->format != AV_PIX_FMT_D3D11)
+        return AVERROR(EINVAL);
+
+    err = av_buffer_replace(&s->device_ref, input_frames->device_ref);
+    if (err < 0)
+        return err;
+
+    s->device = (AVHWDeviceContext*)s->device_ref->data;
+    s->hwctx  = s->device->hwctx;
+
+    err = av_buffer_replace(&s->frames_ref, inlink->hw_frames_ctx);
+    if (err < 0)
+        return err;
+
+    /* Default output parameters match input parameters. */
+    s->input_format = input_frames->sw_format;
+    if (s->output_format == AV_PIX_FMT_NONE)
+        s->output_format = input_frames->sw_format;
+    if (!s->output_width)
+        s->output_width  = inlink->w;
+    if (!s->output_height)
+        s->output_height = inlink->h;
+
+    return 0;
+}
+
+static int libplacebo_config_input(AVFilterLink *inlink)
+{
+    AVFilterContext *avctx = inlink->dst;
+
+    if (!inlink->hw_frames_ctx) {
+        av_log(avctx, AV_LOG_ERROR,
+               "Filtering requires a hardware frames context on the input.\n");
+        return AVERROR(EINVAL);
+    }
+
+    switch (inlink->format) {
+    case AV_PIX_FMT_VULKAN:
+        return ff_vk_filter_config_input(inlink);
+    case AV_PIX_FMT_D3D11:
+        return init_d3d11_input(inlink);
+    default:
+        {
+            const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
+            av_log(avctx, AV_LOG_ERROR,
+                   "Unknown input pixel format %s (%d) fed to filter!\n",
+                   desc ? desc->name : "<unknown>", inlink->format);
+            return AVERROR(EINVAL);
+        }
+    }
+
+    return 0;
+}
+
 static int libplacebo_config_output(AVFilterLink *outlink)
 {
     int err;
     AVFilterContext *avctx = outlink->src;
     LibplaceboContext *s   = avctx->priv;
     AVFilterLink *inlink   = outlink->src->inputs[0];
+    AVHWFramesContext *local_hwfc = (AVHWFramesContext *)s->vkctx.frames_ref->data;
     AVHWFramesContext *hwfc;
-    AVVulkanFramesContext *vkfc;
     AVRational scale_sar;
     int *out_w = &s->vkctx.output_width;
     int *out_h = &s->vkctx.output_height;
@@ -559,10 +675,23 @@ static int libplacebo_config_output(AVFilterLink *outlink)
         s->vkctx.output_format = s->vkctx.input_format;
     }
 
-    RET(ff_vk_filter_config_output(outlink));
-    hwfc = (AVHWFramesContext *) outlink->hw_frames_ctx->data;
-    vkfc = hwfc->hwctx;
-    vkfc->usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    RET(ff_vk_filter_config_output2(outlink, local_hwfc->format));
+
+    switch (local_hwfc->format) {
+    case AV_PIX_FMT_VULKAN:
+        {
+            AVVulkanFramesContext *vkfc = NULL;
+            hwfc = (AVHWFramesContext *) outlink->hw_frames_ctx->data;
+            vkfc = hwfc->hwctx;
+            vkfc->usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        }
+        break;
+    case AV_PIX_FMT_D3D11:
+        break;
+    default:
+        av_log(avctx, AV_LOG_ERROR, "brrr\n");
+        return AVERROR_BUG;
+    }
 
     return 0;
 
@@ -743,7 +872,7 @@ static const AVFilterPad libplacebo_inputs[] = {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
         .filter_frame = &filter_frame,
-        .config_props = &ff_vk_filter_config_input,
+        .config_props = &libplacebo_config_input,
     },
 };
 
@@ -764,7 +893,7 @@ const AVFilter ff_vf_libplacebo = {
     .process_command = &ff_filter_process_command,
     FILTER_INPUTS(libplacebo_inputs),
     FILTER_OUTPUTS(libplacebo_outputs),
-    FILTER_SINGLE_PIXFMT(AV_PIX_FMT_VULKAN),
+    FILTER_PIXFMTS_ARRAY(pix_fmts),
     .priv_class     = &libplacebo_class,
     .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE,
 };

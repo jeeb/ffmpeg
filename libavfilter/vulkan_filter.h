@@ -19,6 +19,7 @@
 #ifndef AVFILTER_VULKAN_FILTER_H
 #define AVFILTER_VULKAN_FILTER_H
 
+#include "libavutil/pixfmt.h"
 #include "avfilter.h"
 
 #include "vulkan.h"
@@ -29,6 +30,7 @@
 int  ff_vk_filter_init                 (AVFilterContext *avctx);
 int  ff_vk_filter_config_input         (AVFilterLink   *inlink);
 int  ff_vk_filter_config_output        (AVFilterLink  *outlink);
+int  ff_vk_filter_config_output2       (AVFilterLink *outlink, enum AVPixelFormat pix_fmt);
 int  ff_vk_filter_config_output_inplace(AVFilterLink  *outlink);
 
 #endif /* AVFILTER_VULKAN_FILTER_H */

@@ -132,6 +132,11 @@ int ff_vk_filter_config_output_inplace(AVFilterLink *outlink)
 
 int ff_vk_filter_config_output(AVFilterLink *outlink)
 {
+    return ff_vk_filter_config_output2(outlink, AV_PIX_FMT_VULKAN);
+}
+
+int ff_vk_filter_config_output2(AVFilterLink *outlink, enum AVPixelFormat pix_fmt)
+{
     int err;
     AVFilterContext *avctx = outlink->src;
     FFVulkanContext *s = avctx->priv;
@@ -159,10 +164,16 @@ int ff_vk_filter_config_output(AVFilterLink *outlink)
     }
     output_frames = (AVHWFramesContext*)output_frames_ref->data;
 
-    output_frames->format    = AV_PIX_FMT_VULKAN;
+    output_frames->format    = pix_fmt;
     output_frames->sw_format = s->output_format;
     output_frames->width     = s->output_width;
     output_frames->height    = s->output_height;
+
+    av_log(avctx, AV_LOG_VERBOSE,
+           "set up hw frames ctx: format: %s, sw_format: %s, width: %dx%d\n",
+           av_get_pix_fmt_name(output_frames->format),
+           av_get_pix_fmt_name(output_frames->sw_format),
+           output_frames->width, output_frames->height);
 
     err = av_hwframe_ctx_init(output_frames_ref);
     if (err < 0) {
