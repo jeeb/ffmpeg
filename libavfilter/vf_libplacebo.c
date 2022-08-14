@@ -16,6 +16,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#define COBJMACROS
+
 #include "libavutil/file.h"
 #include "libavutil/hwcontext_d3d11va.h"
 #include "libavutil/opt.h"
