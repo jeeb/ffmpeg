@@ -180,6 +180,7 @@ void avcodec_free_context(AVCodecContext **pavctx)
     av_freep(&avctx->inter_matrix);
     av_freep(&avctx->rc_override);
     av_channel_layout_uninit(&avctx->ch_layout);
+    av_frame_side_data_set_uninit(&avctx->frame_sd_set);
 
     av_freep(pavctx);
 }
