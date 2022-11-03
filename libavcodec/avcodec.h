@@ -2087,6 +2087,13 @@ typedef struct AVCodecContext {
      *   an error.
      */
     int64_t frame_num;
+
+    /**
+     * Set containing static side data, such as HDR10 CLL / MDCV structures.
+     * - encoding: set by user
+     * - decoding: unused
+     */
+    AVFrameSideDataSet side_data_set;
 } AVCodecContext;
 
 /**
