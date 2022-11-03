@@ -168,6 +168,13 @@ typedef struct AVCodecInternal {
      * a boolean to describe whether context is opened or not.
      */
     unsigned int ctx_opened;
+
+    /**
+     * Set holding static side data, such as HDR10 CLL / MDCV structures.
+     * - encoding: set by user
+     * - decoding: unused
+     */
+    AVFrameSideDataSet side_data_set;
 } AVCodecInternal;
 
 /**

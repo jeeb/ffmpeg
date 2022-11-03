@@ -403,6 +403,7 @@ void avcodec_flush_buffers(AVCodecContext *avctx)
     avci->nb_draining_errors = 0;
     av_frame_unref(avci->buffer_frame);
     av_packet_unref(avci->buffer_pkt);
+    av_side_data_set_wipe(&avci->side_data_set);
 
     if (HAVE_THREADS && avctx->active_thread_type & FF_THREAD_FRAME)
         ff_thread_flush(avctx);

@@ -184,11 +184,16 @@ AVCodecContext *avcodec_alloc_context3(const AVCodec *codec)
 void avcodec_free_context(AVCodecContext **pavctx)
 {
     AVCodecContext *avctx = *pavctx;
+    AVCodecInternal *avci = NULL;
 
     if (!avctx)
         return;
 
     avcodec_close(avctx);
+
+    avci = avctx->internal;
+    if (avci)
+        av_side_data_set_wipe(&avci->side_data_set);
 
     av_freep(&avctx->internal);
 
