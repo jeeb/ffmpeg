@@ -2062,6 +2062,14 @@ typedef struct AVCodecContext {
      * Number of entries in side_data_prefer_packet.
      */
     unsigned nb_side_data_prefer_packet;
+
+    /**
+     * Set containing static side data, such as HDR10 CLL / MDCV structures.
+     * - encoding: set by user
+     * - decoding: unused
+     */
+    AVFrameSideData  **frame_side_data;
+    int             nb_frame_side_data;
 } AVCodecContext;
 
 /**
