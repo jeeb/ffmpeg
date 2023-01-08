@@ -29,6 +29,7 @@
 #include "libavutil/bprint.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/fifo.h"
+#include "libavutil/frame.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
@@ -718,4 +719,33 @@ int attribute_align_arg avcodec_receive_frame(AVCodecContext *avctx, AVFrame *fr
     if (av_codec_is_decoder(avctx->codec))
         return ff_decode_receive_frame(avctx, frame);
     return ff_encode_receive_frame(avctx, frame);
+}
+
+int avcodec_configure_side_data(AVCodecContext *avctx,
+                                const AVFrameSideDataSet set)
+{
+    if (!avctx || !avctx->internal || !av_codec_is_encoder(avctx->codec))
+        return AVERROR(EINVAL);
+
+    {
+        AVCodecInternal    *avci = avctx->internal;
+        AVFrameSideDataSet *dst  = &avci->side_data_set;
+
+        for (int i = 0; i < set.nb_side_data; i++) {
+            const AVFrameSideData *sd_src = set.side_data[i];
+            AVFrameSideData *sd_dst =
+                av_new_side_data_to_set(dst, sd_src->type,
+                                        sd_src->size);
+            if (!sd_dst) {
+                av_side_data_set_wipe(dst);
+                return AVERROR(ENOMEM);
+            }
+
+            memcpy(sd_dst->data, sd_src->data, sd_src->size);
+
+            av_dict_copy(&sd_dst->metadata, sd_src->metadata, 0);
+        }
+
+        return 0;
+    }
 }

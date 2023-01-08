@@ -3224,6 +3224,18 @@ void av_fast_padded_mallocz(void *ptr, unsigned int *size, size_t min_size);
 int avcodec_is_open(AVCodecContext *s);
 
 /**
+ * Configure a side data set to an encoder AVCodecContext. With multiple
+ * calls new side data gets added in addition to the existing set of side data.
+ *
+ * @param avctx codec context to which to add side data
+ * @param set   set of side data to add
+ *
+* @return negative error code on failure, >=0 on success.
+ */
+int avcodec_configure_side_data(AVCodecContext *avctx,
+                                const AVFrameSideDataSet set);
+
+/**
  * @}
  */
 
