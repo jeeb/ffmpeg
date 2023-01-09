@@ -356,6 +356,19 @@ int enc_open(OutputStream *ost, AVFrame *frame)
         enc_ctx->colorspace             = frame->colorspace;
         enc_ctx->chroma_sample_location = frame->chroma_location;
 
+        ret = av_frame_side_data_set_extend(
+            &enc_ctx->frame_sd_set,
+            (const AVFrameSideDataSet){
+                .sd    = frame->side_data,
+                .nb_sd = frame->nb_side_data
+            },
+            AV_FRAME_SIDE_DATA_SET_FLAG_NO_DUPLICATES);
+        if (ret < 0) {
+            av_log(NULL, AV_LOG_ERROR, "failed to configure video encoder: %s!\n",
+                   av_err2str(ret));
+            return ret;
+        }
+
         // Field order: autodetection
         if (enc_ctx->flags & (AV_CODEC_FLAG_INTERLACED_DCT | AV_CODEC_FLAG_INTERLACED_ME) &&
             ost->top_field_first >= 0)
