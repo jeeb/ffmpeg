@@ -246,6 +246,16 @@ int enc_open(void *opaque, const AVFrame *frame)
         enc_ctx->colorspace             = frame->colorspace;
         enc_ctx->chroma_sample_location = frame->chroma_location;
 
+        ret = avcodec_configure_side_data(
+            enc_ctx,
+            (const AVFrameSideData **)frame->side_data, frame->nb_side_data,
+            AV_FRAME_SIDE_DATA_FLAG_UNIQUE);
+        if (ret < 0) {
+            av_log(NULL, AV_LOG_ERROR, "failed to configure video encoder: %s!\n",
+                   av_err2str(ret));
+            return ret;
+        }
+
         if (enc_ctx->flags & (AV_CODEC_FLAG_INTERLACED_DCT | AV_CODEC_FLAG_INTERLACED_ME) ||
             (frame->flags & AV_FRAME_FLAG_INTERLACED)
 #if FFMPEG_OPT_TOP
