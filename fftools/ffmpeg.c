@@ -3118,11 +3118,23 @@ static int init_output_stream_encode(OutputStream *ost, AVFrame *frame)
                                                  av_pix_fmt_desc_get(enc_ctx->pix_fmt)->comp[0].depth);
 
         if (frame) {
+            int ret = AVERROR_BUG;
+
             enc_ctx->color_range            = frame->color_range;
             enc_ctx->color_primaries        = frame->color_primaries;
             enc_ctx->color_trc              = frame->color_trc;
             enc_ctx->colorspace             = frame->colorspace;
             enc_ctx->chroma_sample_location = frame->chroma_location;
+
+            if ((ret = avcodec_configure_side_data(enc_ctx,
+                                                   (const AVFrameSideDataSet){
+                                                       .side_data    = frame->side_data,
+                                                       .nb_side_data = frame->nb_side_data
+                                                   })) < 0) {
+                av_log(NULL, AV_LOG_ERROR, "failed to configure video encoder: %s!\n",
+                       av_err2str(ret));
+                return ret;
+            }
         }
 
         enc_ctx->framerate = ost->frame_rate;
