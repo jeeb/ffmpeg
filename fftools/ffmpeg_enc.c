@@ -314,6 +314,17 @@ int enc_open(OutputStream *ost, AVFrame *frame)
         enc_ctx->colorspace             = frame->colorspace;
         enc_ctx->chroma_sample_location = frame->chroma_location;
 
+        ret = av_side_data_set_extend(&enc_ctx->side_data_set,
+                                      (const AVFrameSideDataSet){
+                                         .sd    = frame->side_data,
+                                         .nb_sd = frame->nb_side_data
+                                      }, 0);
+        if (ret < 0) {
+            av_log(NULL, AV_LOG_ERROR, "failed to configure video encoder: %s!\n",
+                   av_err2str(ret));
+            return ret;
+        }
+
         enc_ctx->framerate = fr;
 
         ost->st->avg_frame_rate = fr;
