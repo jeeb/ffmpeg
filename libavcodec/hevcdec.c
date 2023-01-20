@@ -3151,6 +3151,7 @@ static int decode_nal_units(HEVCContext *s, const uint8_t *buf, int length)
 {
     int i, ret = 0;
     int eos_at_start = 1;
+    int irap_found = 0;
 
     s->ref = NULL;
     s->last_eos = s->eos;
@@ -3168,6 +3169,9 @@ static int decode_nal_units(HEVCContext *s, const uint8_t *buf, int length)
     }
 
     for (i = 0; i < s->pkt.nb_nals; i++) {
+        if (s->pkt.nals[i].type >= 16 && s->pkt.nals[i].type <= 23)
+            irap_found = 1;
+
         if (s->pkt.nals[i].type == HEVC_NAL_EOB_NUT ||
             s->pkt.nals[i].type == HEVC_NAL_EOS_NUT) {
             if (eos_at_start) {
@@ -3179,6 +3183,9 @@ static int decode_nal_units(HEVCContext *s, const uint8_t *buf, int length)
             eos_at_start = 0;
         }
     }
+
+    if (s->last_eos && !irap_found)
+        s->eos = 1;
 
     /*
      * Check for RPU delimiter.
