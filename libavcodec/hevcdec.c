@@ -3222,7 +3222,7 @@ static int decode_nal_units(HEVCContext *s, const uint8_t *buf, int length)
         H2645NAL *nal = &s->pkt.nals[i];
 
         if (s->avctx->skip_frame >= AVDISCARD_ALL ||
-            (s->avctx->skip_frame >= AVDISCARD_NONREF
+            ((s->avctx->skip_frame >= AVDISCARD_NONREF || s->eos)
             && ff_hevc_nal_is_nonref(nal->type)) || nal->nuh_layer_id > 0)
             continue;
 
