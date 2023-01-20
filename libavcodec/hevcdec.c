@@ -2881,6 +2881,11 @@ static int hevc_frame_start(HEVCContext *s)
 
     s->no_rasl_output_flag = IS_IDR(s) || IS_BLA(s) || (s->nal_unit_type == HEVC_NAL_CRA_NUT && s->last_eos);
 
+    if (IS_IRAP(s))
+        av_log(s->avctx, AV_LOG_VERBOSE, "rasl? %s output (%d, %d).\n",
+               s->no_rasl_output_flag ? "not" : "is",
+               s->eos, s->last_eos);
+
     if (s->ps.pps->tiles_enabled_flag)
         lc->end_of_tiles_x = s->ps.pps->column_width[0] << s->ps.sps->log2_ctb_size;
 
@@ -3168,6 +3173,10 @@ static int decode_nal_units(HEVCContext *s, const uint8_t *buf, int length)
         return ret;
     }
 
+    av_log(s->avctx, AV_LOG_VERBOSE,
+           "1 - eos_at_start: %d, last_eos: %d, eos: %d\n",
+           eos_at_start, s->last_eos, s->eos);
+
     for (i = 0; i < s->pkt.nb_nals; i++) {
         if (s->pkt.nals[i].type >= 16 && s->pkt.nals[i].type <= 23)
             irap_found = 1;
@@ -3186,6 +3195,10 @@ static int decode_nal_units(HEVCContext *s, const uint8_t *buf, int length)
 
     if (s->last_eos && !irap_found)
         s->eos = 1;
+
+    av_log(s->avctx, AV_LOG_VERBOSE,
+           "2 - eos_at_start: %d, last_eos: %d, eos: %d\n",
+           eos_at_start, s->last_eos, s->eos);
 
     /*
      * Check for RPU delimiter.
