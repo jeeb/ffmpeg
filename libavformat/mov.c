@@ -50,6 +50,7 @@
 #include "libavutil/timecode.h"
 #include "libavutil/uuid.h"
 #include "libavcodec/ac3tab.h"
+#include "libavcodec/codec_desc.h"
 #include "libavcodec/flac.h"
 #include "libavcodec/hevc.h"
 #include "libavcodec/mpegaudiodecheader.h"
@@ -1589,11 +1590,23 @@ static int mov_read_enda(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
 static int mov_read_pcmc(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
-    int format_flags;
+    int format_flags, pcm_sample_size;
     int version, flags;
+    AVStream *st = NULL;
 
     if (atom.size < 6) {
         av_log(c->fc, AV_LOG_ERROR, "Empty pcmC box\n");
+        return AVERROR_INVALIDDATA;
+    }
+
+    if (c->fc->nb_streams < 1)
+        return 0;
+    st = c->fc->streams[c->fc->nb_streams-1];
+
+    if (st->codecpar->codec_type != AVMEDIA_TYPE_AUDIO) {
+        av_log(c->fc, AV_LOG_ERROR,
+               "Undefined 'pcmC' box for a non-audio %s stream!\n",
+               av_get_media_type_string(st->codecpar->codec_type));
         return AVERROR_INVALIDDATA;
     }
 
@@ -1607,7 +1620,82 @@ static int mov_read_pcmc(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         return AVERROR_INVALIDDATA;
     }
 
-    format_flags = avio_r8(pb);
+    format_flags    = avio_r8(pb);
+    pcm_sample_size = avio_r8(pb);
+
+    switch (st->codecpar->codec_tag) {
+    case MOV_MP4_IPCM_TAG:
+        // For the integer format (ipcm), PCM_sample_size shall take a value
+        // from the set 16, 24, 32.
+integer_logic:
+        switch (pcm_sample_size) {
+        case 16:
+            st->codecpar->codec_id = AV_CODEC_ID_PCM_S16BE;
+            break;
+        case 24:
+            st->codecpar->codec_id = AV_CODEC_ID_PCM_S24BE;
+            break;
+        case 32:
+            st->codecpar->codec_id = AV_CODEC_ID_PCM_S32BE;
+            break;
+        default:
+            av_log(c->fc, AV_LOG_ERROR,
+                   "Undefined PCM sample size of %d for integer audio!\n",
+                   pcm_sample_size);
+            return AVERROR_INVALIDDATA;
+        }
+
+        break;
+    case MOV_MP4_FPCM_TAG:
+        // For the floating point format (fpcm), PCM_sample_size shall take a
+        // value from the set 32, 64.
+floating_point_logic:
+        switch (pcm_sample_size) {
+        case 32:
+            st->codecpar->codec_id = AV_CODEC_ID_PCM_F32BE;
+            break;
+        case 64:
+            st->codecpar->codec_id = AV_CODEC_ID_PCM_F64BE;
+            break;
+        default:
+            av_log(c->fc, AV_LOG_ERROR,
+                   "Undefined PCM sample size of %d for floating point audio!\n",
+                   pcm_sample_size);
+            return AVERROR_INVALIDDATA;
+        }
+
+        break;
+    default:
+        {
+            const AVCodecDescriptor *desc =
+                avcodec_descriptor_get(st->codecpar->codec_id);
+            if (!desc) {
+                av_log(c->fc, AV_LOG_ERROR,
+                       "Stream %d (track %d) has a 'pcmC' box describing the "
+                       "PCM format and is not under a coding name 'ipcm' or "
+                       "'fpcm', yet has no existing codec set to figure out "
+                       "whether it is defining integer or floating point "
+                       "based audio!\n",
+                       st->index, st->id);
+                return AVERROR_INVALIDDATA;
+            }
+
+            if (!strncmp(desc->name, "pcm_s", 5))
+                goto integer_logic;
+            else if (!strncmp(desc->name, "pcm_f", 5))
+                goto floating_point_logic;
+            else {
+                av_log(c->fc, AV_LOG_ERROR,
+                       "Audio format %s does not seem to match either signed "
+                       "integer or floating point raw PCM audio formats!\n",
+                       desc->name);
+                return AVERROR_INVALIDDATA;
+            }
+        }
+    }
+
+    st->codecpar->bits_per_coded_sample = pcm_sample_size;
+
     if (format_flags & 1) // indicates little-endian format. If not present, big-endian format is used
         set_last_stream_little_endian(c->fc);
 
