@@ -884,6 +884,71 @@ static int mov_write_dmlp_tag(AVFormatContext *s, AVIOContext *pb, MOVTrack *tra
     return update_size(pb, pos);
 }
 
+static int mov_write_pcmc_tag(AVFormatContext *s, AVIOContext *pb, MOVTrack *track)
+{
+    unsigned int is_int = 0, is_flt = 0, is_le = 0;
+    const AVCodecDescriptor *desc =
+        avcodec_descriptor_get(track->par->codec_id);
+    const int sample_size =
+        av_get_exact_bits_per_sample(track->par->codec_id);
+    int64_t pos = avio_tell(pb);
+
+    if (!desc || !sample_size) {
+        av_log(s, AV_LOG_ERROR,
+               "Either no codec descriptor was available (%s) or no sample "
+               "size could be received (%s) for stream %d in order to write "
+               "a pcmC box!\n",
+               desc ? "no" : "yes", sample_size ? "no" : "yes",
+               track->st->index);
+        return AVERROR(EINVAL);
+    }
+
+    is_int = !strncmp(desc->name, "pcm_s", 5);
+    is_flt = !strncmp(desc->name, "pcm_f", 5);
+
+    if (!is_int && !is_flt) {
+        av_log(s, AV_LOG_ERROR,
+               "Could not figure out whether codec %s is integer or float "
+               "uncompressed PCM when writing out a standard MP4 pcmC box "
+               "for stream %d!\n",
+               desc->name, track->st->index);
+        return AVERROR(EINVAL);
+    }
+
+    is_le = desc->name[(strlen(desc->name) - 2)] == 'l' &&
+            desc->name[(strlen(desc->name) - 1)] == 'e';
+
+    /**
+     * - For the integer format, PCM_sample_size shall take a value from the
+     *   set 16, 24, 32.
+     * - For the floating point format, PCM_sample_size shall take a value
+     *   from the set 32, 64.
+     */
+    if ((is_int &&
+            !(sample_size == 16 || sample_size == 24 || sample_size == 32)) ||
+        (is_flt &&
+            !(sample_size == 32 || sample_size == 64))) {
+        av_log(s, AV_LOG_ERROR,
+               "Invalid PCM sample size %d for codec %s (int: %u, flt: %u) "
+               "when writing out a standard MP4 pcmC box for stream %d!\n",
+               sample_size, desc->name, is_int, is_flt,
+               track->st->index);
+        return AVERROR(EINVAL);
+    }
+
+    /* Box|FullBox basics */
+    avio_wb32(pb, 0);  /* size placeholder */
+    ffio_wfourcc(pb, (const unsigned char *)"pcmC");
+    avio_w8(pb, 0);    /* version = 0 */
+    avio_wb24(pb, 0);  /* flags = 0 */
+
+    /* Contents */
+    avio_w8(pb, is_le);       /* format_flags */
+    avio_w8(pb, sample_size); /* PCM_sample_size */
+
+    return update_size(pb, pos);
+}
+
 static int mov_write_chan_tag(AVFormatContext *s, AVIOContext *pb, MOVTrack *track)
 {
     uint32_t layout_tag, bitmap, *channel_desc;
@@ -1311,6 +1376,9 @@ static int mov_write_audio_tag(AVFormatContext *s, AVIOContext *pb, MOVMuxContex
         ret = mov_write_dops_tag(s, pb, track);
     else if (track->par->codec_id == AV_CODEC_ID_TRUEHD)
         ret = mov_write_dmlp_tag(s, pb, track);
+    else if (tag == MOV_MP4_IPCM_TAG || tag == MOV_MP4_FPCM_TAG)
+        // pcmC is required for these tags as per ISO/IEC 23003-5
+        ret = mov_write_pcmc_tag(s, pb, track);
     else if (track->vos_len > 0)
         ret = mov_write_glbl_tag(pb, track);
 
@@ -7751,6 +7819,16 @@ static const AVCodecTag codec_mp4_tags[] = {
     { AV_CODEC_ID_MPEGH_3D_AUDIO,  MKTAG('m', 'h', 'm', '1') },
     { AV_CODEC_ID_TTML,            MOV_MP4_TTML_TAG          },
     { AV_CODEC_ID_TTML,            MOV_ISMV_TTML_TAG         },
+    { AV_CODEC_ID_PCM_S16BE,       MOV_MP4_IPCM_TAG          },
+    { AV_CODEC_ID_PCM_S16LE,       MOV_MP4_IPCM_TAG          },
+    { AV_CODEC_ID_PCM_S24BE,       MOV_MP4_IPCM_TAG          },
+    { AV_CODEC_ID_PCM_S24LE,       MOV_MP4_IPCM_TAG          },
+    { AV_CODEC_ID_PCM_S32BE,       MOV_MP4_IPCM_TAG          },
+    { AV_CODEC_ID_PCM_S32LE,       MOV_MP4_IPCM_TAG          },
+    { AV_CODEC_ID_PCM_F32BE,       MOV_MP4_FPCM_TAG          },
+    { AV_CODEC_ID_PCM_F32LE,       MOV_MP4_FPCM_TAG          },
+    { AV_CODEC_ID_PCM_F64BE,       MOV_MP4_FPCM_TAG          },
+    { AV_CODEC_ID_PCM_F64LE,       MOV_MP4_FPCM_TAG          },
     { AV_CODEC_ID_NONE,               0 },
 };
 #if CONFIG_MP4_MUXER || CONFIG_PSP_MUXER

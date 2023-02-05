@@ -431,4 +431,8 @@ struct MP4TrackKindMapping {
 
 extern const struct MP4TrackKindMapping ff_mov_track_kind_table[];
 
+// ISO/IEC 23003-5 uncompressed PCM audio identifiers
+#define MOV_MP4_IPCM_TAG MKTAG('i', 'p', 'c', 'm')
+#define MOV_MP4_FPCM_TAG MKTAG('f', 'p', 'c', 'm')
+
 #endif /* AVFORMAT_ISOM_H */
