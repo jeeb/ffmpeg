@@ -1,0 +1,72 @@
+95be5b4c97ba8989fb738df35cb8b7f2 *tests/data/fate/ffmpeg-side-data-to-avstreams.mp4
+36472 tests/data/fate/ffmpeg-side-data-to-avstreams.mp4
+#tb 0: 1/25
+#media_type 0: video
+#codec_id 0: rawvideo
+#dimensions 0: 128x128
+#sar 0: 1/1
+0,          0,          0,        1,    49152, 0xf6fe3b30
+[STREAM]
+index=0
+codec_name=jpeg2000
+profile=0
+codec_type=video
+codec_tag_string=mp4v
+codec_tag=0x7634706d
+width=128
+height=128
+coded_width=128
+coded_height=128
+closed_captions=0
+film_grain=0
+has_b_frames=0
+sample_aspect_ratio=1:1
+display_aspect_ratio=1:1
+pix_fmt=rgb24
+level=-99
+color_range=unknown
+color_space=unknown
+color_transfer=unknown
+color_primaries=unknown
+chroma_location=unspecified
+field_order=bt
+refs=1
+id=0x1
+r_frame_rate=25/1
+avg_frame_rate=25/1
+time_base=1/12800
+start_pts=0
+start_time=0.000000
+duration_ts=512
+duration=0.040000
+bit_rate=6503600
+max_bit_rate=N/A
+bits_per_raw_sample=8
+nb_frames=1
+nb_read_frames=N/A
+nb_read_packets=N/A
+DISPOSITION:default=1
+DISPOSITION:dub=0
+DISPOSITION:original=0
+DISPOSITION:comment=0
+DISPOSITION:lyrics=0
+DISPOSITION:karaoke=0
+DISPOSITION:forced=0
+DISPOSITION:hearing_impaired=0
+DISPOSITION:visual_impaired=0
+DISPOSITION:clean_effects=0
+DISPOSITION:attached_pic=0
+DISPOSITION:timed_thumbnails=0
+DISPOSITION:captions=0
+DISPOSITION:descriptions=0
+DISPOSITION:metadata=0
+DISPOSITION:dependent=0
+DISPOSITION:still_image=0
+TAG:language=und
+TAG:handler_name=VideoHandler
+TAG:vendor_id=[0][0][0][0]
+TAG:encoder=Lavc jpeg2000
+[SIDE_DATA]
+side_data_type=ICC Profile
+[/SIDE_DATA]
+[/STREAM]

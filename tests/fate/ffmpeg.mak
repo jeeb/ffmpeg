@@ -224,3 +224,7 @@ FATE_TIME_BASE-$(call PARSERDEMDEC, MPEGVIDEO, MPEGPS, MPEG2VIDEO, MPEGVIDEO_DEM
 fate-time_base: CMD = md5 -i $(TARGET_SAMPLES)/mpeg2/dvd_single_frame.vob -an -sn -c:v copy -r 25 -time_base 1001:30000 -fflags +bitexact -f mxf
 
 FATE_SAMPLES_FFMPEG-yes += $(FATE_TIME_BASE-yes)
+
+FATE_SAMPLES_FFMPEG-$(call TRANSCODE, JPEG2000 PNG, MP4 IMAGE_PNG_PIPE) += fate-ffmpeg-side-data-to-avstreams
+fate-ffmpeg-side-data-to-avstreams: CMD = transcode png_pipe $(TARGET_SAMPLES)/png1/lena-int_rgb24.png\
+                                          mp4 "-c jpeg2000" "" "-show_streams"

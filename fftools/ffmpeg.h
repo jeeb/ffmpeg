@@ -593,6 +593,7 @@ typedef struct OutputStream {
     AVFrame *filtered_frame;
     AVFrame *last_frame;
     AVFrame *sq_frame;
+    AVFrame *side_data_frame;
     AVPacket *pkt;
     int64_t last_dropped;
     int64_t last_nb0_frames[3];

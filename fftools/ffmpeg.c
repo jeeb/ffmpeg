@@ -3113,6 +3113,12 @@ static int init_output_stream_encode(OutputStream *ost, AVFrame *frame)
                                                  av_pix_fmt_desc_get(enc_ctx->pix_fmt)->comp[0].depth);
 
         if (frame) {
+            if (!(ost->side_data_frame = av_frame_alloc()))
+                return AVERROR(ENOMEM);
+
+            if ((ret = av_frame_copy_props(ost->side_data_frame, frame)) < 0)
+                return ret;
+
             enc_ctx->color_range            = frame->color_range;
             enc_ctx->color_primaries        = frame->color_primaries;
             enc_ctx->color_trc              = frame->color_trc;

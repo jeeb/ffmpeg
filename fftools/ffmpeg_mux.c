@@ -580,6 +580,49 @@ static int bsf_init(MuxStream *ms)
     return 0;
 }
 
+static int avframe_side_data_to_avstream(AVStream *stream, const AVFrame *frame)
+{
+    static const struct sd_mapping {
+        enum AVPacketSideDataType packet;
+        enum AVFrameSideDataType frame;
+    } sd_list[] = {
+        { AV_PKT_DATA_REPLAYGAIN ,                AV_FRAME_DATA_REPLAYGAIN },
+        { AV_PKT_DATA_DISPLAYMATRIX,              AV_FRAME_DATA_DISPLAYMATRIX },
+        { AV_PKT_DATA_SPHERICAL,                  AV_FRAME_DATA_SPHERICAL },
+        { AV_PKT_DATA_STEREO3D,                   AV_FRAME_DATA_STEREO3D },
+        { AV_PKT_DATA_AUDIO_SERVICE_TYPE,         AV_FRAME_DATA_AUDIO_SERVICE_TYPE },
+        { AV_PKT_DATA_MASTERING_DISPLAY_METADATA, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA },
+        { AV_PKT_DATA_CONTENT_LIGHT_LEVEL,        AV_FRAME_DATA_CONTENT_LIGHT_LEVEL },
+        { AV_PKT_DATA_A53_CC,                     AV_FRAME_DATA_A53_CC },
+        { AV_PKT_DATA_ICC_PROFILE,                AV_FRAME_DATA_ICC_PROFILE },
+        { AV_PKT_DATA_S12M_TIMECODE,              AV_FRAME_DATA_S12M_TIMECODE },
+        { AV_PKT_DATA_DYNAMIC_HDR10_PLUS,         AV_FRAME_DATA_DYNAMIC_HDR_PLUS },
+    };
+
+    if (!frame || !frame->nb_side_data)
+        return 0;
+
+    if (!stream)
+        return AVERROR(EINVAL);
+
+    for (int i = 0; i < FF_ARRAY_ELEMS(sd_list); i++) {
+        const struct sd_mapping mapping = sd_list[i];
+        uint8_t *packet_sd  = NULL;
+        AVFrameSideData *sd = av_frame_get_side_data(frame, mapping.frame);
+        if (!sd)
+            continue;
+
+        packet_sd = av_stream_new_side_data(stream, mapping.packet,
+                                            sd->size);
+        if (!packet_sd)
+            return AVERROR(ENOMEM);
+
+        memcpy(packet_sd, sd->data, sd->size);
+    }
+
+    return 0;
+}
+
 int of_stream_init(OutputFile *of, OutputStream *ost)
 {
     Muxer *mux = mux_from_of(of);
@@ -588,6 +631,9 @@ int of_stream_init(OutputFile *of, OutputStream *ost)
 
     if (ost->sq_idx_mux >= 0)
         sq_set_tb(mux->sq_mux, ost->sq_idx_mux, ost->mux_timebase);
+
+    if ((ret = avframe_side_data_to_avstream(ost->st, ost->side_data_frame)) < 0)
+        return ret;
 
     /* initialize bitstream filters for the output stream
      * needs to be done here, because the codec id for streamcopy is not
@@ -666,6 +712,7 @@ static void ost_free(OutputStream **post)
     av_frame_free(&ost->filtered_frame);
     av_frame_free(&ost->sq_frame);
     av_frame_free(&ost->last_frame);
+    av_frame_free(&ost->side_data_frame);
     av_packet_free(&ost->pkt);
     av_dict_free(&ost->encoder_opts);
 
