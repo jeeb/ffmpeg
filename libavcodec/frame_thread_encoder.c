@@ -110,8 +110,7 @@ static void * attribute_align_arg worker(void *v){
         pthread_mutex_unlock(&c->finished_task_mutex);
     }
 end:
-    avcodec_close(avctx);
-    av_freep(&avctx);
+    avcodec_free_context(&avctx);
     return NULL;
 }
 
@@ -195,15 +194,17 @@ av_cold int ff_frame_thread_encoder_init(AVCodecContext *avctx)
 
     for(i=0; i<avctx->thread_count ; i++){
         void *tmpv;
+        AVCodecInternal *avci;
         thread_avctx = avcodec_alloc_context3(avctx->codec);
         if (!thread_avctx) {
             ret = AVERROR(ENOMEM);
             goto fail;
         }
         tmpv = thread_avctx->priv_data;
+        avci = thread_avctx->internal;
         *thread_avctx = *avctx;
         thread_avctx->priv_data = tmpv;
-        thread_avctx->internal = NULL;
+        thread_avctx->internal = avci;
         thread_avctx->hw_frames_ctx = NULL;
         ret = av_opt_copy(thread_avctx, avctx);
         if (ret < 0)

@@ -115,7 +115,7 @@ static int64_t get_bit_rate(AVCodecContext *ctx)
 int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *codec, AVDictionary **options)
 {
     int ret = 0;
-    AVCodecInternal *avci;
+    AVCodecInternal *avci = NULL;
     const FFCodec *codec2;
 
     if (avcodec_is_open(avctx))
@@ -147,12 +147,13 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
     if (avctx->extradata_size < 0 || avctx->extradata_size >= FF_MAX_EXTRADATA_SIZE)
         return AVERROR(EINVAL);
 
-    avci = av_mallocz(sizeof(*avci));
+    avci = avctx->internal;
     if (!avci) {
-        ret = AVERROR(ENOMEM);
-        goto end;
+        av_log(avctx, AV_LOG_ERROR,
+               "This AVCodecContext was not properly allocated! Please utilize "
+               "avcodec_alloc_context3!\n");
+        return AVERROR(EINVAL);
     }
-    avctx->internal = avci;
 
     avci->buffer_frame = av_frame_alloc();
     avci->buffer_pkt = av_packet_alloc();
@@ -360,6 +361,9 @@ FF_ENABLE_DEPRECATION_WARNINGS
 
 end:
 
+    if (ret >= 0 && avci)
+        avci->ctx_opened = 1;
+
     return ret;
 free_and_end:
     avcodec_close(avctx);
@@ -470,7 +474,7 @@ av_cold int avcodec_close(AVCodecContext *avctx)
         ff_icc_context_uninit(&avci->icc);
 #endif
 
-        av_freep(&avctx->internal);
+        avci->ctx_opened = 0;
     }
 
     for (i = 0; i < avctx->nb_coded_side_data; i++)
@@ -703,7 +707,7 @@ void avcodec_string(char *buf, int buf_size, AVCodecContext *enc, int encode)
 
 int avcodec_is_open(AVCodecContext *s)
 {
-    return !!s->internal;
+    return s->internal && s->internal->ctx_opened;
 }
 
 int attribute_align_arg avcodec_receive_frame(AVCodecContext *avctx, AVFrame *frame)

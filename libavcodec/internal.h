@@ -163,6 +163,11 @@ typedef struct AVCodecInternal {
 #if CONFIG_LCMS2
     FFIccContext icc; /* used to read and write embedded ICC profiles */
 #endif
+
+    /**
+     * a boolean to describe whether context is opened or not.
+     */
+    unsigned int ctx_opened;
 } AVCodecInternal;
 
 /**

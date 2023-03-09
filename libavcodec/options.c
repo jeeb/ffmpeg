@@ -28,6 +28,7 @@
 
 #include "avcodec.h"
 #include "codec_internal.h"
+#include "internal.h"
 #include "libavutil/avassert.h"
 #include "libavutil/internal.h"
 #include "libavutil/mem.h"
@@ -89,6 +90,7 @@ static const AVClass av_codec_context_class = {
 static int init_context_defaults(AVCodecContext *s, const AVCodec *codec)
 {
     const FFCodec *const codec2 = ffcodec(codec);
+    AVCodecInternal *avci = NULL;
     int flags=0;
     memset(s, 0, sizeof(AVCodecContext));
 
@@ -132,7 +134,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
     if(codec && codec2->priv_data_size){
         s->priv_data = av_mallocz(codec2->priv_data_size);
         if (!s->priv_data)
-            return AVERROR(ENOMEM);
+            goto alloc_fail;
         if(codec->priv_class){
             *(const AVClass**)s->priv_data = codec->priv_class;
             av_opt_set_defaults(s->priv_data);
@@ -147,7 +149,21 @@ FF_ENABLE_DEPRECATION_WARNINGS
             d++;
         }
     }
+
+    avci = av_mallocz(sizeof(*avci));
+    if (!avci)
+        goto alloc_fail;
+
+    s->internal = avci;
+
     return 0;
+
+alloc_fail:
+    av_freep(&s->internal);
+
+    av_freep(&s->priv_data);
+
+    return AVERROR(ENOMEM);
 }
 
 AVCodecContext *avcodec_alloc_context3(const AVCodec *codec)
@@ -173,6 +189,8 @@ void avcodec_free_context(AVCodecContext **pavctx)
         return;
 
     avcodec_close(avctx);
+
+    av_freep(&avctx->internal);
 
     av_freep(&avctx->extradata);
     av_freep(&avctx->subtitle_header);
