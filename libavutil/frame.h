@@ -242,6 +242,14 @@ typedef struct AVFrameSideData {
 } AVFrameSideData;
 
 /**
+ * Structure to hold a set of AVFrameSideData
+ */
+typedef struct AVFrameSideDataSet {
+    AVFrameSideData **side_data;
+    int            nb_side_data;
+} AVFrameSideDataSet;
+
+/**
  * Structure describing a single Region Of Interest.
  *
  * When multiple regions are defined in a single side-data block, they
