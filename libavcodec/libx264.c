@@ -25,6 +25,7 @@
 #include "libavutil/eval.h"
 #include "libavutil/internal.h"
 #include "libavutil/opt.h"
+#include "libavutil/mastering_display_metadata.h"
 #include "libavutil/mem.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/stereo3d.h"
@@ -842,6 +843,82 @@ static int convert_pix_fmt(enum AVPixelFormat pix_fmt)
         return AVERROR(EINVAL);\
     }
 
+#if X264_BUILD >= 163
+static void handle_mdcv(x264_param_t *params,
+                        const AVMasteringDisplayMetadata *mdcv)
+{
+    int *points[][2] = {
+        {
+            &params->mastering_display.i_red_x,
+            &params->mastering_display.i_red_y
+        },
+        {
+            &params->mastering_display.i_green_x,
+            &params->mastering_display.i_green_y
+        },
+        {
+            &params->mastering_display.i_blue_x,
+            &params->mastering_display.i_blue_y
+        },
+    };
+
+    if (!mdcv->has_primaries && !mdcv->has_luminance)
+        return;
+
+    params->mastering_display.b_mastering_display = 1;
+
+    if (!mdcv->has_primaries)
+        goto skip_primaries;
+
+    for (int i = 0; i < 3; i++) {
+        const AVRational *src = mdcv->display_primaries[i];
+        int *dst[2] = { points[i][0], points[i][1] };
+
+        *dst[0] = av_rescale_q(1, src[0], (AVRational){ 1, 50000 });
+        *dst[1] = av_rescale_q(1, src[1], (AVRational){ 1, 50000 });
+    }
+
+    params->mastering_display.i_white_x =
+        av_rescale_q(1, mdcv->white_point[0], (AVRational){ 1, 50000 });
+    params->mastering_display.i_white_y =
+        av_rescale_q(1, mdcv->white_point[1], (AVRational){ 1, 50000 });
+
+skip_primaries:
+    if (!mdcv->has_luminance)
+        return;
+
+    params->mastering_display.i_display_max =
+        av_rescale_q(1, mdcv->max_luminance, (AVRational){ 1, 10000 });
+    params->mastering_display.i_display_min =
+        av_rescale_q(1, mdcv->min_luminance, (AVRational){ 1, 10000 });
+}
+#endif // X264_BUILD >= 163
+
+static void handle_side_data(AVCodecContext *avctx, x264_param_t *params)
+{
+#if X264_BUILD >= 163
+    const AVFrameSideDataSet set = avctx->side_data_set;
+    const AVFrameSideData *cll_sd =
+        av_side_data_set_get_item(set, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL);
+    const AVFrameSideData *mdcv_sd =
+        av_side_data_set_get_item(set, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA);
+
+    if (cll_sd) {
+        const AVContentLightMetadata *cll =
+            (AVContentLightMetadata *)cll_sd->data;
+
+        params->content_light_level.i_max_cll  = cll->MaxCLL;
+        params->content_light_level.i_max_fall = cll->MaxFALL;
+
+        params->content_light_level.b_cll = 1;
+    }
+
+    if (mdcv_sd) {
+        handle_mdcv(params, (AVMasteringDisplayMetadata *)mdcv_sd->data);
+    }
+#endif // X264_BUILD >= 163
+}
+
 static av_cold int X264_init(AVCodecContext *avctx)
 {
     X264Context *x4 = avctx->priv_data;
@@ -1141,6 +1218,8 @@ FF_ENABLE_DEPRECATION_WARNINGS
         x4->params.vui.i_transfer  = avctx->color_trc;
     if (avctx->chroma_sample_location != AVCHROMA_LOC_UNSPECIFIED)
         x4->params.vui.i_chroma_loc = avctx->chroma_sample_location - 1;
+
+    handle_side_data(avctx, &x4->params);
 
     if (avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER)
         x4->params.b_repeat_headers = 0;
