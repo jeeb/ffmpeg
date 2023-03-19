@@ -708,6 +708,18 @@ AVFrameSideData *av_frame_new_side_data(AVFrame *frame,
     return ret;
 }
 
+
+AVFrameSideData *av_new_side_data_to_set(AVFrameSideDataSet *set,
+                                         enum AVFrameSideDataType type,
+                                         size_t size)
+{
+    AVBufferRef     *buf = av_buffer_alloc(size);
+    AVFrameSideData *ret = add_side_data_to_set_from_buf(set, type, buf);
+    if (!ret)
+        av_buffer_unref(&buf);
+    return ret;
+}
+
 AVFrameSideData *av_frame_get_side_data(const AVFrame *frame,
                                         enum AVFrameSideDataType type)
 {

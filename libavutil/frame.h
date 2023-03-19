@@ -999,6 +999,19 @@ const char *av_frame_side_data_name(enum AVFrameSideDataType type);
 void av_side_data_set_wipe(AVFrameSideDataSet *set);
 
 /**
+ * Add a new side data entry to a set.
+ *
+ * @param set a set to which the side data should be added
+ * @param type type of the added side data
+ * @param size size of the side data
+ *
+ * @return newly added side data on success, NULL on error
+ */
+AVFrameSideData *av_new_side_data_to_set(AVFrameSideDataSet *set,
+                                         enum AVFrameSideDataType type,
+                                         size_t size);
+
+/**
  * @}
  */
 
