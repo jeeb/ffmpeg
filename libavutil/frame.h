@@ -1012,6 +1012,16 @@ AVFrameSideData *av_new_side_data_to_set(AVFrameSideDataSet *set,
                                          size_t size);
 
 /**
+ * @param set a set to which the side data should be added
+ * @param type type of the added side data
+ *
+ * @return a pointer to the side data of a given type on success, NULL if there
+ *         is no side data with such type in this set.
+ */
+AVFrameSideData *av_get_side_data_from_set(const AVFrameSideDataSet set,
+                                           enum AVFrameSideDataType type);
+
+/**
  * @}
  */
 
