@@ -1066,6 +1066,24 @@ const char *av_frame_side_data_name(enum AVFrameSideDataType type);
 void av_side_data_set_uninit(AVFrameSideDataSet *set);
 
 /**
+ * Add a new side data entry to a set.
+ *
+ * @param set a set to which the side data should be added
+ * @param type type of the added side data
+ * @param size size of the side data
+ * @param allow_duplicates an unsigned integer noting whether duplicates are
+ *                         allowed or not. If duplicates are not allowed, all
+ *                         entries of the same side data type are first removed
+ *                         and freed before the new entry is added.
+ *
+ * @return newly added side data on success, NULL on error
+ */
+AVFrameSideData *av_side_data_set_new_item(AVFrameSideDataSet *set,
+                                           enum AVFrameSideDataType type,
+                                           size_t size,
+                                           unsigned int allow_duplicates);
+
+/**
  * @}
  */
 

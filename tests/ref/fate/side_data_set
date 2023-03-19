@@ -1,0 +1,7 @@
+Initial addition results with duplicates:
+sd 0, MaxCLL: 1
+sd 1, MaxCLL: 2
+sd 2, MaxCLL: 3
+
+Final state after a single 'no-duplicates' addition:
+sd 0, MaxCLL: 1337

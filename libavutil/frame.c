@@ -846,6 +846,40 @@ AVFrameSideData *av_frame_new_side_data(AVFrame *frame,
     return ret;
 }
 
+
+AVFrameSideData *av_side_data_set_new_item(AVFrameSideDataSet *set,
+                                           enum AVFrameSideDataType type,
+                                           size_t size,
+                                           unsigned int allow_duplicates)
+{
+    AVBufferRef     *buf = av_buffer_alloc(size);
+    AVFrameSideData *ret = NULL;
+
+    if (!allow_duplicates) {
+        for (int i = 0; i < set->nb_sd; i++) {
+            if (set->sd[i]->type != type)
+                continue;
+
+            free_side_data(&set->sd[i]);
+
+            for (int j = i + 1; j < set->nb_sd; j++) {
+                set->sd[j - 1] = set->sd[j];
+            }
+
+            // finally, cause a retry of the same index and update state
+            // regarding there being one less side data item in the set.
+            i--;
+            set->nb_sd--;
+        }
+    }
+
+    ret = add_side_data_to_set_from_buf(set, type, buf);
+    if (!ret)
+        av_buffer_unref(&buf);
+
+    return ret;
+}
+
 AVFrameSideData *av_frame_get_side_data(const AVFrame *frame,
                                         enum AVFrameSideDataType type)
 {
