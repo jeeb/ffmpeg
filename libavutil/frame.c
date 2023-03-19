@@ -90,6 +90,11 @@ static void frame_side_data_wipe(AVFrame *frame)
     wipe_side_data(&frame->side_data, &frame->nb_side_data);
 }
 
+void av_frame_side_data_set_uninit(AVFrameSideDataSet *set)
+{
+    wipe_side_data(&set->sd, &set->nb_sd);
+}
+
 AVFrame *av_frame_alloc(void)
 {
     AVFrame *frame = av_malloc(sizeof(*frame));
