@@ -1102,6 +1102,18 @@ int av_frame_side_data_set_entry_from_sd(AVFrameSideDataSet *dst,
                                          unsigned int flags);
 
 /**
+ * Get a side data entry of a specific type from a set.
+ *
+ * @param set the set from which side data should be queried from
+ * @param type type of side data to be queried
+ *
+ * @return a pointer to the side data of a given type on success, NULL if there
+ *         is no side data with such type in this set.
+ */
+AVFrameSideData *av_frame_side_data_set_get_entry(const AVFrameSideDataSet set,
+                                                  enum AVFrameSideDataType type);
+
+/**
  * @}
  */
 

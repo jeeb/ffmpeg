@@ -929,14 +929,26 @@ int av_frame_side_data_set_entry_from_sd(AVFrameSideDataSet *dst,
     }
 }
 
+AVFrameSideData *av_frame_side_data_set_get_entry(const AVFrameSideDataSet set,
+                                                  enum AVFrameSideDataType type)
+{
+    for (int i = 0; i < set.nb_sd; i++) {
+        if (set.sd[i]->type == type)
+            return set.sd[i];
+    }
+    return NULL;
+}
+
 AVFrameSideData *av_frame_get_side_data(const AVFrame *frame,
                                         enum AVFrameSideDataType type)
 {
-    for (int i = 0; i < frame->nb_side_data; i++) {
-        if (frame->side_data[i]->type == type)
-            return frame->side_data[i];
-    }
-    return NULL;
+    return av_frame_side_data_set_get_entry(
+        (const AVFrameSideDataSet){
+            .sd    = frame->side_data,
+            .nb_sd = frame->nb_side_data
+        },
+        type
+    );
 }
 
 static int frame_copy_video(AVFrame *dst, const AVFrame *src)
