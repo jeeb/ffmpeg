@@ -992,6 +992,13 @@ int av_frame_apply_cropping(AVFrame *frame, int flags);
 const char *av_frame_side_data_name(enum AVFrameSideDataType type);
 
 /**
+ * Clear all side data from a side data set
+ *
+ * @param set the set which should be cleared
+ */
+void av_side_data_set_wipe(AVFrameSideDataSet *set);
+
+/**
  * @}
  */
 
