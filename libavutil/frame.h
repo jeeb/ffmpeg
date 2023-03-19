@@ -1058,6 +1058,14 @@ int av_frame_apply_cropping(AVFrame *frame, int flags);
 const char *av_frame_side_data_name(enum AVFrameSideDataType type);
 
 /**
+ * Free all side data items and their contents, then zeroes out the
+ * struct values.
+ *
+ * @param set the set which should be uninitialized
+ */
+void av_side_data_set_uninit(AVFrameSideDataSet *set);
+
+/**
  * @}
  */
 
