@@ -787,23 +787,22 @@ FF_ENABLE_DEPRECATION_WARNINGS
     return NULL;
 }
 
-AVFrameSideData *av_frame_new_side_data_from_buf(AVFrame *frame,
-                                                 enum AVFrameSideDataType type,
-                                                 AVBufferRef *buf)
+static AVFrameSideData *add_side_data_to_set_from_buf(AVFrameSideDataSet *set,
+                                                      enum AVFrameSideDataType type,
+                                                      AVBufferRef *buf)
 {
     AVFrameSideData *ret, **tmp;
 
     if (!buf)
         return NULL;
 
-    if (frame->nb_side_data > INT_MAX / sizeof(*frame->side_data) - 1)
+    if (set->nb_sd > INT_MAX / sizeof(*set->sd) - 1)
         return NULL;
 
-    tmp = av_realloc(frame->side_data,
-                     (frame->nb_side_data + 1) * sizeof(*frame->side_data));
+    tmp = av_realloc(set->sd, (set->nb_sd + 1) * sizeof(*set->sd));
     if (!tmp)
         return NULL;
-    frame->side_data = tmp;
+    set->sd = tmp;
 
     ret = av_mallocz(sizeof(*ret));
     if (!ret)
@@ -814,7 +813,23 @@ AVFrameSideData *av_frame_new_side_data_from_buf(AVFrame *frame,
     ret->size = buf->size;
     ret->type = type;
 
-    frame->side_data[frame->nb_side_data++] = ret;
+    set->sd[set->nb_sd++] = ret;
+
+    return ret;
+}
+
+AVFrameSideData *av_frame_new_side_data_from_buf(AVFrame *frame,
+                                                 enum AVFrameSideDataType type,
+                                                 AVBufferRef *buf)
+{
+    AVFrameSideDataSet set = {
+        .sd    = frame->side_data,
+        .nb_sd = frame->nb_side_data,
+    };
+    AVFrameSideData *ret = add_side_data_to_set_from_buf(&set, type, buf);
+
+    frame->side_data    = set.sd;
+    frame->nb_side_data = set.nb_sd;
 
     return ret;
 }
