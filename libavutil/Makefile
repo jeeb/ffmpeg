@@ -271,6 +271,7 @@ TESTPROGS = adler32                                                     \
             ripemd                                                      \
             sha                                                         \
             sha512                                                      \
+            side_data_set                                               \
             softfloat                                                   \
             tree                                                        \
             twofish                                                     \
