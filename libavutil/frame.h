@@ -1084,6 +1084,18 @@ AVFrameSideData *av_side_data_set_new_item(AVFrameSideDataSet *set,
                                            unsigned int allow_duplicates);
 
 /**
+ * Get a side data entry of a specific type from a set.
+ *
+ * @param set the set from which side data should be queried from
+ * @param type type of side data to be queried
+ *
+ * @return a pointer to the side data of a given type on success, NULL if there
+ *         is no side data with such type in this set.
+ */
+AVFrameSideData *av_side_data_set_get_item(const AVFrameSideDataSet set,
+                                           enum AVFrameSideDataType type);
+
+/**
  * @}
  */
 
