@@ -1060,6 +1060,27 @@ const char *av_frame_side_data_name(enum AVFrameSideDataType type);
  */
 void av_frame_side_data_free(AVFrameSideData ***sd, int *nb_sd);
 
+#define AV_FRAME_SIDE_DATA_SET_FLAG_NO_DUPLICATES (1 << 0)
+
+/**
+ * Add a new side data entry to a set.
+ *
+ * @param sd    pointer to array of side data to which to add another entry.
+ * @param nb_sd pointer to an integer containing the number of entries in
+ *              the array.
+ * @param type  type of the added side data
+ * @param size  size of the side data
+ * @param flags Some combination of AV_FRAME_SIDE_DATA_SET_FLAG_* flags, or 0.
+ *
+ * @return newly added side data on success, NULL on error. In case of
+ *         AV_FRAME_SIDE_DATA_SET_FLAG_NO_DUPLICATES being set, entries
+ *         of matching AVFrameSideDataType will be removed before the
+ *         addition is attempted.
+ */
+AVFrameSideData *av_frame_side_data_new(AVFrameSideData ***sd, int *nb_sd,
+                                        enum AVFrameSideDataType type,
+                                        size_t size, unsigned int flags);
+
 /**
  * @}
  */

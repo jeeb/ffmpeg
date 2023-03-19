@@ -148,6 +148,10 @@ FATE_LIBAVUTIL += fate-sha512
 fate-sha512: libavutil/tests/sha512$(EXESUF)
 fate-sha512: CMD = run libavutil/tests/sha512$(EXESUF)
 
+FATE_LIBAVUTIL += fate-side_data_set
+fate-side_data_set: libavutil/tests/side_data_set$(EXESUF)
+fate-side_data_set: CMD = run libavutil/tests/side_data_set$(EXESUF)
+
 FATE_LIBAVUTIL += fate-tree
 fate-tree: libavutil/tests/tree$(EXESUF)
 fate-tree: CMD = run libavutil/tests/tree$(EXESUF)
