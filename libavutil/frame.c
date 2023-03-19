@@ -720,14 +720,26 @@ AVFrameSideData *av_new_side_data_to_set(AVFrameSideDataSet *set,
     return ret;
 }
 
+AVFrameSideData *av_get_side_data_from_set(const AVFrameSideDataSet set,
+                                           enum AVFrameSideDataType type)
+{
+    for (int i = 0; i < set.nb_side_data; i++) {
+        if (set.side_data[i]->type == type)
+            return set.side_data[i];
+    }
+    return NULL;
+}
+
 AVFrameSideData *av_frame_get_side_data(const AVFrame *frame,
                                         enum AVFrameSideDataType type)
 {
-    for (int i = 0; i < frame->nb_side_data; i++) {
-        if (frame->side_data[i]->type == type)
-            return frame->side_data[i];
-    }
-    return NULL;
+    return av_get_side_data_from_set(
+        (const AVFrameSideDataSet){
+            .side_data    = frame->side_data,
+            .nb_side_data = frame->nb_side_data
+        },
+        type
+    );
 }
 
 static int frame_copy_video(AVFrame *dst, const AVFrame *src)
