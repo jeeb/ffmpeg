@@ -12,3 +12,10 @@ Final state after a single 'no-duplicates' addition:
 sd 0, Ambient viewing environment
 sd 1, Spherical Mapping
 sd 2, Content light level metadata: MaxCLL: 1337
+
+State of the copied set:
+sd 0, Ambient viewing environment
+sd 1, Spherical Mapping
+sd 2, Content light level metadata: MaxCLL: 1337
+
+Result of trying to extend a set by itself: Invalid argument

@@ -91,6 +91,22 @@ int main(void)
     puts("\nFinal state after a single 'no-duplicates' addition:");
     print_clls(set);
 
+    {
+        AVFrameSideDataSet dst_set = { 0 };
+        av_assert0(av_frame_side_data_set_extend(&dst_set, set, 0) >= 0);
+
+        puts("\nState of the copied set:");
+        print_clls(dst_set);
+
+        av_frame_side_data_set_uninit(&dst_set);
+    }
+
+    {
+        int ret = av_frame_side_data_set_extend(&set, set, 0);
+        printf("\nResult of trying to extend a set by itself: %s\n",
+               av_err2str(ret));
+    }
+
     av_frame_side_data_set_uninit(&set);
 
     return 0;

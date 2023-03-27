@@ -1086,6 +1086,21 @@ AVFrameSideData *av_frame_side_data_set_new_item(AVFrameSideDataSet *set,
                                                  unsigned int flags);
 
 /**
+ * Add multiple side data entries to a set in one go.
+ *
+ * @param dst a set to which the side data should be added
+ * @param src a set from which the side data should be copied from
+ * @param flags Some combination of AV_FRAME_SIDE_DATA_SET_FLAG_* flags, or 0.
+ *
+ * @return negative error code on failure, >=0 on success.
+ *
+ * @see av_frame_side_data_set_new_item regarding the flags.
+ */
+int av_frame_side_data_set_extend(AVFrameSideDataSet *dst,
+                                  const AVFrameSideDataSet src,
+                                  unsigned int flags);
+
+/**
  * Get a side data entry of a specific type from a set.
  *
  * @param set the set from which side data should be queried from

@@ -879,6 +879,38 @@ AVFrameSideData *av_frame_side_data_set_new_item(AVFrameSideDataSet *set,
     return ret;
 }
 
+int av_frame_side_data_set_extend(AVFrameSideDataSet *dst,
+                                  const AVFrameSideDataSet src,
+                                  unsigned int flags)
+{
+    if (src.nb_sd > 0 && src.nb_sd == dst->nb_sd &&
+        src.sd == dst->sd)
+        return AVERROR(EINVAL);
+
+    for (int i = 0; i < src.nb_sd; i++) {
+        const AVFrameSideData *sd_src = src.sd[i];
+        AVBufferRef           *buf    = av_buffer_ref(sd_src->buf);
+        AVFrameSideData       *sd_dst =
+            add_side_data_to_set_from_buf(dst, sd_src->type, buf);
+        if (!sd_dst) {
+            av_buffer_unref(&buf);
+            av_frame_side_data_set_uninit(dst);
+            return AVERROR(ENOMEM);
+        }
+
+        {
+            int ret = av_dict_copy(&sd_dst->metadata, sd_src->metadata, 0);
+            if (ret < 0) {
+                av_frame_side_data_set_uninit(dst);
+                return ret;
+            }
+        }
+
+    }
+
+    return 0;
+}
+
 AVFrameSideData *av_frame_side_data_set_get_item(const AVFrameSideDataSet set,
                                                  enum AVFrameSideDataType type)
 {
