@@ -720,6 +720,27 @@ AVFrameSideData *av_new_side_data_to_set(AVFrameSideDataSet *set,
     return ret;
 }
 
+int av_extend_side_data_set(AVFrameSideDataSet *dst,
+                            const AVFrameSideDataSet src)
+{
+    for (int i = 0; i < src.nb_side_data; i++) {
+        const AVFrameSideData *sd_src = src.side_data[i];
+        AVFrameSideData *sd_dst =
+            av_new_side_data_to_set(dst, sd_src->type,
+                                    sd_src->size);
+        if (!sd_dst) {
+            av_side_data_set_wipe(dst);
+            return AVERROR(ENOMEM);
+        }
+
+        memcpy(sd_dst->data, sd_src->data, sd_src->size);
+
+        av_dict_copy(&sd_dst->metadata, sd_src->metadata, 0);
+    }
+
+    return 0;
+}
+
 AVFrameSideData *av_get_side_data_from_set(const AVFrameSideDataSet set,
                                            enum AVFrameSideDataType type)
 {

@@ -1012,6 +1012,17 @@ AVFrameSideData *av_new_side_data_to_set(AVFrameSideDataSet *set,
                                          size_t size);
 
 /**
+ * Add multiple side data entries to a set in one go.
+ *
+ * @param dst a set to which the side data should be added
+ * @param src a set from which the side data should be copied from
+ *
+ * @return negative error code on failure, >=0 on success.
+ */
+int av_extend_side_data_set(AVFrameSideDataSet *dst,
+                            const AVFrameSideDataSet src);
+
+/**
  * @param set a set to which the side data should be added
  * @param type type of the added side data
  *
