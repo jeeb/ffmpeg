@@ -100,6 +100,7 @@ typedef struct DdagrabContext {
     int        out_fmt;
     int        allow_fallback;
     int        force_fmt;
+    int        start_pts_at_zero;
 } DdagrabContext;
 
 #define OFFSET(x) offsetof(DdagrabContext, x)
@@ -123,6 +124,8 @@ static const AVOption ddagrab_options[] = {
                                                    OFFSET(allow_fallback), AV_OPT_TYPE_BOOL,   { .i64 = 0    },       0,       1, FLAGS },
     { "force_fmt",  "exclude BGRA from format list (experimental, discouraged by Microsoft)",
                                                    OFFSET(force_fmt),  AV_OPT_TYPE_BOOL,       { .i64 = 0    },       0,       1, FLAGS },
+    { "start_pts_at_zero", "start timestamps at PTS=0, removing any initial offset",
+                                                   OFFSET(start_pts_at_zero), AV_OPT_TYPE_BOOL, { .i64 = 1   },       0,       1, FLAGS },
     { NULL }
 };
 
@@ -913,7 +916,7 @@ static int ddagrab_request_frame(AVFilterLink *outlink)
         av_usleep(delay);
     }
 
-    if (!dda->first_pts)
+    if (dda->start_pts_at_zero && !dda->first_pts)
         dda->first_pts = now;
     now -= dda->first_pts;
 
