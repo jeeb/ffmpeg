@@ -75,7 +75,6 @@ typedef struct DdagrabContext {
     AVRational time_base;
     int64_t time_frame;
     int64_t time_timeout;
-    int64_t first_pts;
 
     DXGI_FORMAT raw_format;
     int raw_width;
@@ -913,10 +912,6 @@ static int ddagrab_request_frame(AVFilterLink *outlink)
         av_usleep(delay);
     }
 
-    if (!dda->first_pts)
-        dda->first_pts = now;
-    now -= dda->first_pts;
-
     if (!dda->probed_texture) {
         ret = next_frame_internal(avctx, &cur_texture);
     } else {
@@ -948,7 +943,7 @@ static int ddagrab_request_frame(AVFilterLink *outlink)
 
     // AcquireNextFrame sometimes has bursts of delay.
     // This increases accuracy of the timestamp, but might upset consumers due to more jittery framerate?
-    now = av_gettime_relative() - dda->first_pts;
+    now = av_gettime_relative();
 
     ID3D11Texture2D_GetDesc(cur_texture, &desc);
     if (desc.Format != dda->raw_format ||
