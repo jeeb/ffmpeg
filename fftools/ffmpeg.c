@@ -822,16 +822,6 @@ static int process_input_packet(InputStream *ist, const AVPacket *pkt, int no_eo
         dts_est = pd->dts_est;
     }
 
-    if (f->recording_time != INT64_MAX) {
-        int64_t start_time = 0;
-        if (copy_ts) {
-            start_time += f->start_time != AV_NOPTS_VALUE ? f->start_time : 0;
-            start_time += start_at_zero ? 0 : f->start_time_effective;
-        }
-        if (dts_est >= f->recording_time + start_time)
-            pkt = NULL;
-    }
-
     for (int oidx = 0; oidx < ist->nb_outputs; oidx++) {
         OutputStream *ost = ist->outputs[oidx];
         if (ost->enc || (!pkt && no_eof))
@@ -1060,7 +1050,7 @@ static int process_input(int file_index, AVPacket *pkt)
     InputStream *ist;
     int ret, i;
 
-    ret = ifile_get_packet(ifile, pkt);
+    ret = 0;
 
     if (ret == 1) {
         /* the input file is looped: flush the decoders */

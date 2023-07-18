@@ -89,6 +89,10 @@ enum FrameOpaque {
     FRAME_OPAQUE_SEND_COMMAND,
 };
 
+enum PacketOpaque {
+    PKT_OPAQUE_SUB_HEARTBEAT = 1,
+};
+
 typedef struct HWDevice {
     const char *name;
     enum AVHWDeviceType type;
@@ -426,11 +430,6 @@ typedef struct InputFile {
 
     float readrate;
     int accurate_seek;
-
-    /* when looping the input file, this queue is used by decoders to report
-     * the last frame timestamp back to the demuxer thread */
-    AVThreadMessageQueue *audio_ts_queue;
-    int                   audio_ts_queue_size;
 } InputFile;
 
 enum forced_keyframes_const {
@@ -849,18 +848,6 @@ int64_t of_filesize(OutputFile *of);
 
 int ifile_open(const OptionsContext *o, const char *filename, Scheduler *sch);
 void ifile_close(InputFile **f);
-
-/**
- * Get next input packet from the demuxer.
- *
- * @param pkt the packet is written here when this function returns 0
- * @return
- * - 0 when a packet has been read successfully
- * - 1 when stream end was reached, but the stream is looped;
- *     caller should flush decoders and read from this demuxer again
- * - a negative error code on failure
- */
-int ifile_get_packet(InputFile *f, AVPacket *pkt);
 
 int ist_output_add(InputStream *ist, OutputStream *ost);
 int ist_filter_add(InputStream *ist, InputFilter *ifilter, int is_simple);
