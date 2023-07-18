@@ -809,11 +809,6 @@ static int process_input_packet(InputStream *ist, const AVPacket *pkt, int no_eo
     int ret = 0;
     int eof_reached = 0;
 
-    if (ist->decoding_needed) {
-        ret = dec_packet(ist, pkt, no_eof);
-        if (ret < 0 && ret != AVERROR_EOF)
-            return ret;
-    }
     if (ret == AVERROR_EOF || (!pkt && !ist->decoding_needed))
         eof_reached = 1;
 
@@ -1025,18 +1020,6 @@ static void reset_eagain(void)
         ost->unavailable = 0;
 }
 
-static void decode_flush(InputFile *ifile)
-{
-    for (int i = 0; i < ifile->nb_streams; i++) {
-        InputStream *ist = ifile->streams[i];
-
-        if (ist->discard || !ist->decoding_needed)
-            continue;
-
-        dec_packet(ist, NULL, 1);
-    }
-}
-
 /*
  * Return
  * - 0 -- one packet was read and processed
@@ -1052,11 +1035,6 @@ static int process_input(int file_index, AVPacket *pkt)
 
     ret = 0;
 
-    if (ret == 1) {
-        /* the input file is looped: flush the decoders */
-        decode_flush(ifile);
-        return AVERROR(EAGAIN);
-    }
     if (ret < 0) {
         if (ret != AVERROR_EOF) {
             av_log(ifile, AV_LOG_ERROR,
