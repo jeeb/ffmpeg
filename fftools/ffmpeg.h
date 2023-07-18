@@ -596,7 +596,6 @@ typedef struct OutputStream {
     /* packet quality factor */
     atomic_int quality;
 
-    int sq_idx_encode;
     int sq_idx_mux;
 
     EncStats enc_stats_pre;
@@ -654,7 +653,6 @@ extern FilterGraph **filtergraphs;
 extern int        nb_filtergraphs;
 
 extern char *vstats_filename;
-extern char *sdp_filename;
 
 extern float dts_delta_threshold;
 extern float dts_error_threshold;
@@ -687,7 +685,7 @@ extern const AVIOInterruptCB int_cb;
 extern const OptionDef options[];
 extern HWDevice *filter_hw_device;
 
-extern unsigned nb_output_dumped;
+extern atomic_uint nb_output_dumped;
 
 extern int ignore_unknown_streams;
 extern int copy_unknown_streams;
@@ -798,13 +796,6 @@ int of_open(const OptionsContext *o, const char *filename, Scheduler *sch);
 void of_free(OutputFile **pof);
 
 void of_enc_stats_close(void);
-
-int of_output_packet(OutputFile *of, OutputStream *ost, AVPacket *pkt);
-
-/**
- * @param dts predicted packet dts in AV_TIME_BASE_Q
- */
-int of_streamcopy(OutputStream *ost, const AVPacket *pkt, int64_t dts);
 
 int64_t of_filesize(OutputFile *of);
 

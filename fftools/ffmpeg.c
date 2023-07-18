@@ -117,7 +117,7 @@ typedef struct BenchmarkTimeStamps {
 static BenchmarkTimeStamps get_benchmark_time_stamps(void);
 static int64_t getmaxrss(void);
 
-unsigned nb_output_dumped = 0;
+atomic_uint nb_output_dumped = 0;
 
 static BenchmarkTimeStamps current_time;
 AVIOContext *progress_avio = NULL;
@@ -466,9 +466,6 @@ void close_output_stream(OutputStream *ost)
 {
     OutputFile *of = output_files[ost->file_index];
     ost->finished |= ENCODER_FINISHED;
-
-    if (ost->sq_idx_encode >= 0)
-        sq_send(of->sq_encode, ost->sq_idx_encode, SQFRAME(NULL));
 }
 
 static void print_report(int is_last_report, int64_t timer_start, int64_t cur_time)
@@ -496,7 +493,7 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
             last_time = cur_time;
         }
         if (((cur_time - last_time) < stats_period && !first_report) ||
-            (first_report && nb_output_dumped < nb_output_files))
+            (first_report && atomic_load(&nb_output_dumped) < nb_output_files))
             return;
         last_time = cur_time;
     }
@@ -781,27 +778,11 @@ int trigger_fix_sub_duration_heartbeat(OutputStream *ost, const AVPacket *pkt)
 static int process_input_packet(InputStream *ist, const AVPacket *pkt, int no_eof)
 {
     InputFile *f = input_files[ist->file_index];
-    int64_t dts_est = AV_NOPTS_VALUE;
     int ret = 0;
     int eof_reached = 0;
 
     if (ret == AVERROR_EOF || (!pkt && !ist->decoding_needed))
         eof_reached = 1;
-
-    if (pkt && pkt->opaque_ref) {
-        DemuxPktData *pd = (DemuxPktData*)pkt->opaque_ref->data;
-        dts_est = pd->dts_est;
-    }
-
-    for (int oidx = 0; oidx < ist->nb_outputs; oidx++) {
-        OutputStream *ost = ist->outputs[oidx];
-        if (ost->enc || (!pkt && no_eof))
-            continue;
-
-        ret = of_streamcopy(ost, pkt, dts_est);
-        if (ret < 0)
-            return ret;
-    }
 
     return !eof_reached;
 }
@@ -1024,16 +1005,6 @@ static int process_input(int file_index, AVPacket *pkt)
                 if (ret>0)
                     return 0;
                 else if (ret < 0)
-                    return ret;
-            }
-
-            /* mark all outputs that don't go through lavfi as finished */
-            for (int oidx = 0; oidx < ist->nb_outputs; oidx++) {
-                OutputStream *ost = ist->outputs[oidx];
-                OutputFile    *of = output_files[ost->file_index];
-
-                ret = of_output_packet(of, ost, NULL);
-                if (ret < 0)
                     return ret;
             }
         }

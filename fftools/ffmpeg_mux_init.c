@@ -924,13 +924,6 @@ static int new_stream_audio(Muxer *mux, const OptionsContext *o,
     return 0;
 }
 
-static int new_stream_attachment(Muxer *mux, const OptionsContext *o,
-                                 OutputStream *ost)
-{
-    ost->finished    = 1;
-    return 0;
-}
-
 static int new_stream_subtitle(Muxer *mux, const OptionsContext *o,
                                OutputStream *ost)
 {
@@ -1168,9 +1161,6 @@ static int ost_add(Muxer *mux, const OptionsContext *o, enum AVMediaType type,
     if (!ost->par_in)
         return AVERROR(ENOMEM);
 
-    ms->muxing_queue = av_fifo_alloc2(8, sizeof(AVPacket*), 0);
-    if (!ms->muxing_queue)
-        return AVERROR(ENOMEM);
     ms->last_mux_dts = AV_NOPTS_VALUE;
 
     ost->st         = st;
@@ -1415,9 +1405,6 @@ static int ost_add(Muxer *mux, const OptionsContext *o, enum AVMediaType type,
 
         sch_mux_stream_buffering(mux->sch, mux->sch_idx, ms->sch_idx,
                                  max_muxing_queue_size, muxing_queue_data_threshold);
-
-        ms->max_muxing_queue_size       = max_muxing_queue_size;
-        ms->muxing_queue_data_threshold = muxing_queue_data_threshold;
     }
 
     MATCH_PER_STREAM_OPT(bits_per_raw_sample, i, ost->bits_per_raw_sample,
@@ -1444,7 +1431,6 @@ static int ost_add(Muxer *mux, const OptionsContext *o, enum AVMediaType type,
     case AVMEDIA_TYPE_VIDEO:      ret = new_stream_video     (mux, o, ost); break;
     case AVMEDIA_TYPE_AUDIO:      ret = new_stream_audio     (mux, o, ost); break;
     case AVMEDIA_TYPE_SUBTITLE:   ret = new_stream_subtitle  (mux, o, ost); break;
-    case AVMEDIA_TYPE_ATTACHMENT: ret = new_stream_attachment(mux, o, ost); break;
     }
     if (ret < 0)
         return ret;
@@ -1918,7 +1904,6 @@ static int setup_sync_queues(Muxer *mux, AVFormatContext *oc, int64_t buf_size_u
         MuxStream     *ms = ms_from_ost(ost);
         enum AVMediaType type = ost->type;
 
-        ost->sq_idx_encode = -1;
         ost->sq_idx_mux    = -1;
 
         nb_interleaved += IS_INTERLEAVED(type);
@@ -1941,11 +1926,17 @@ static int setup_sync_queues(Muxer *mux, AVFormatContext *oc, int64_t buf_size_u
      * - at least one encoded audio/video stream is frame-limited, since
      *   that has similar semantics to 'shortest'
      * - at least one audio encoder requires constant frame sizes
+     *
+     * Note that encoding sync queues are handled in the scheduler, because
+     * different encoders run in different threads and need external
+     * synchronization, while muxer sync queues can be handled inside the muxer
      */
     if ((of->shortest && nb_av_enc > 1) || limit_frames_av_enc || nb_audio_fs) {
-        of->sq_encode = sq_alloc(SYNC_QUEUE_FRAMES, buf_size_us, mux);
-        if (!of->sq_encode)
-            return AVERROR(ENOMEM);
+        int sq_idx, ret;
+
+        sq_idx = sch_add_sq_enc(mux->sch, buf_size_us, mux);
+        if (sq_idx < 0)
+            return sq_idx;
 
         for (int i = 0; i < oc->nb_streams; i++) {
             OutputStream *ost = of->streams[i];
@@ -1955,13 +1946,11 @@ static int setup_sync_queues(Muxer *mux, AVFormatContext *oc, int64_t buf_size_u
             if (!IS_AV_ENC(ost, type))
                 continue;
 
-            ost->sq_idx_encode = sq_add_stream(of->sq_encode,
-                                               of->shortest || ms->max_frames < INT64_MAX);
-            if (ost->sq_idx_encode < 0)
-                return ost->sq_idx_encode;
-
-            if (ms->max_frames != INT64_MAX)
-                sq_limit_frames(of->sq_encode, ost->sq_idx_encode, ms->max_frames);
+            ret = sch_sq_add_enc(mux->sch, sq_idx, ms->sch_idx_enc,
+                                 of->shortest || ms->max_frames < INT64_MAX,
+                                 ms->max_frames);
+            if (ret < 0)
+                return ret;
         }
     }
 
@@ -2714,8 +2703,6 @@ int of_open(const OptionsContext *o, const char *filename, Scheduler *sch)
     av_strlcat(mux->log_name, "/",               sizeof(mux->log_name));
     av_strlcat(mux->log_name, oc->oformat->name, sizeof(mux->log_name));
 
-    if (strcmp(oc->oformat->name, "rtp"))
-        want_sdp = 0;
 
     of->format = oc->oformat;
     if (recording_time != INT64_MAX)
@@ -2731,7 +2718,7 @@ int of_open(const OptionsContext *o, const char *filename, Scheduler *sch)
                                            AVFMT_FLAG_BITEXACT);
     }
 
-    err = sch_add_mux(sch, muxer_thread, NULL, mux,
+    err = sch_add_mux(sch, muxer_thread, mux_check_init, mux,
                       !strcmp(oc->oformat->name, "rtp"));
     if (err < 0)
         return err;
