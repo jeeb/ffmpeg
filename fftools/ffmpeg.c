@@ -1030,9 +1030,6 @@ static int check_keyboard_interaction(int64_t cur_time)
 
 static void reset_eagain(void)
 {
-    int i;
-    for (i = 0; i < nb_input_files; i++)
-        input_files[i]->eagain = 0;
     for (OutputStream *ost = ost_iter(NULL); ost; ost = ost_iter(ost))
         ost->unavailable = 0;
 }
@@ -1056,19 +1053,14 @@ static void decode_flush(InputFile *ifile)
  *   this function should be called again
  * - AVERROR_EOF -- this function should not be called again
  */
-static int process_input(int file_index)
+static int process_input(int file_index, AVPacket *pkt)
 {
     InputFile *ifile = input_files[file_index];
     InputStream *ist;
-    AVPacket *pkt;
     int ret, i;
 
-    ret = ifile_get_packet(ifile, &pkt);
+    ret = ifile_get_packet(ifile, pkt);
 
-    if (ret == AVERROR(EAGAIN)) {
-        ifile->eagain = 1;
-        return ret;
-    }
     if (ret == 1) {
         /* the input file is looped: flush the decoders */
         decode_flush(ifile);
@@ -1115,7 +1107,7 @@ static int process_input(int file_index)
 
     ret = process_input_packet(ist, pkt, 0);
 
-    av_packet_free(&pkt);
+    av_packet_unref(pkt);
 
     return ret < 0 ? ret : 0;
 }
@@ -1125,7 +1117,7 @@ static int process_input(int file_index)
  *
  * @return  0 for success, <0 for error
  */
-static int transcode_step(OutputStream *ost)
+static int transcode_step(OutputStream *ost, AVPacket *demux_pkt)
 {
     InputStream  *ist = NULL;
     int ret;
@@ -1140,10 +1132,8 @@ static int transcode_step(OutputStream *ost)
         av_assert0(ist);
     }
 
-    ret = process_input(ist->file_index);
+    ret = process_input(ist->file_index, demux_pkt);
     if (ret == AVERROR(EAGAIN)) {
-        if (input_files[ist->file_index]->eagain)
-            ost->unavailable = 1;
         return 0;
     }
 
@@ -1169,11 +1159,18 @@ static int transcode(int *err_rate_exceeded)
     int ret = 0, i;
     InputStream *ist;
     int64_t timer_start;
+    AVPacket *demux_pkt = NULL;
 
     print_stream_maps();
 
     *err_rate_exceeded = 0;
     atomic_store(&transcode_init_done, 1);
+
+    demux_pkt = av_packet_alloc();
+    if (!demux_pkt) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
 
     if (stdin_interaction) {
         av_log(NULL, AV_LOG_INFO, "Press [q] to stop, [?] for help\n");
@@ -1202,7 +1199,7 @@ static int transcode(int *err_rate_exceeded)
             break;
         }
 
-        ret = transcode_step(ost);
+        ret = transcode_step(ost, demux_pkt);
         if (ret < 0 && ret != AVERROR_EOF) {
             av_log(NULL, AV_LOG_ERROR, "Error while filtering: %s\n", av_err2str(ret));
             break;
@@ -1242,6 +1239,9 @@ static int transcode(int *err_rate_exceeded)
 
     /* dump report by using the first video and audio streams */
     print_report(1, timer_start, av_gettime_relative());
+
+fail:
+    av_packet_free(&demux_pkt);
 
     return ret;
 }
