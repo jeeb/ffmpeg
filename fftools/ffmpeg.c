@@ -138,30 +138,6 @@ static struct termios oldtty;
 static int restore_tty;
 #endif
 
-/* sub2video hack:
-   Convert subtitles to video with alpha to insert them in filter graphs.
-   This is a temporary solution until libavfilter gets real subtitles support.
- */
-
-static void sub2video_heartbeat(InputFile *infile, int64_t pts, AVRational tb)
-{
-    /* When a frame is read from a file, examine all sub2video streams in
-       the same file and send the sub2video frame again. Otherwise, decoded
-       video frames could be accumulating in the filter graph while a filter
-       (possibly overlay) is desperately waiting for a subtitle frame. */
-    for (int i = 0; i < infile->nb_streams; i++) {
-        InputStream *ist = infile->streams[i];
-
-        if (ist->dec_ctx->codec_type != AVMEDIA_TYPE_SUBTITLE)
-            continue;
-
-        for (int j = 0; j < ist->nb_filters; j++)
-            ifilter_sub2video_heartbeat(ist->filters[j], pts, tb);
-    }
-}
-
-/* end of sub2video hack */
-
 static void term_exit_sigsafe(void)
 {
 #if HAVE_TERMIOS_H
@@ -552,8 +528,8 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
             if (is_last_report)
                 av_bprintf(&buf, "L");
 
-            nb_frames_dup  = ost->filter->nb_frames_dup;
-            nb_frames_drop = ost->filter->nb_frames_drop;
+            nb_frames_dup  = atomic_load(&ost->filter->nb_frames_dup);
+            nb_frames_drop = atomic_load(&ost->filter->nb_frames_drop);
 
             vid = 1;
         }
@@ -921,9 +897,7 @@ static int choose_output(OutputStream **post)
     for (OutputStream *ost = ost_iter(NULL); ost; ost = ost_iter(ost)) {
         int64_t opts;
 
-        if (ost->filter && ost->filter->last_pts != AV_NOPTS_VALUE) {
-            opts = ost->filter->last_pts;
-        } else {
+        {
             opts = ost->last_mux_dts == AV_NOPTS_VALUE ?
                    INT64_MIN : ost->last_mux_dts;
         }
@@ -1072,8 +1046,6 @@ static int process_input(int file_index, AVPacket *pkt)
 
     ist = ifile->streams[pkt->stream_index];
 
-    sub2video_heartbeat(ifile, pkt->pts, pkt->time_base);
-
     ret = process_input_packet(ist, pkt, 0);
 
     av_packet_unref(pkt);
@@ -1092,8 +1064,6 @@ static int transcode_step(OutputStream *ost, AVPacket *demux_pkt)
     int ret;
 
     if (ost->filter) {
-        if ((ret = fg_transcode_step(ost->filter->graph, &ist)) < 0)
-            return ret;
         if (!ist)
             return 0;
     } else {
@@ -1108,14 +1078,6 @@ static int transcode_step(OutputStream *ost, AVPacket *demux_pkt)
 
     if (ret < 0)
         return ret == AVERROR_EOF ? 0 : ret;
-
-    // process_input() above might have caused output to become available
-    // in multiple filtergraphs, so we process all of them
-    for (int i = 0; i < nb_filtergraphs; i++) {
-        ret = reap_filters(filtergraphs[i], 0);
-        if (ret < 0)
-            return ret;
-    }
 
     return 0;
 }

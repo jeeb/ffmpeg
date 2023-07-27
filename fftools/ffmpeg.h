@@ -84,9 +84,7 @@ enum HWAccelID {
 };
 
 enum FrameOpaque {
-    FRAME_OPAQUE_REAP_FILTERS = 1,
-    FRAME_OPAQUE_CHOOSE_INPUT,
-    FRAME_OPAQUE_SUB_HEARTBEAT,
+    FRAME_OPAQUE_SUB_HEARTBEAT = 1,
     FRAME_OPAQUE_EOF,
     FRAME_OPAQUE_SEND_COMMAND,
 };
@@ -315,11 +313,8 @@ typedef struct OutputFilter {
 
     enum AVMediaType     type;
 
-    /* pts of the last frame received from this filter, in AV_TIME_BASE_Q */
-    int64_t last_pts;
-
-    uint64_t nb_frames_dup;
-    uint64_t nb_frames_drop;
+    atomic_uint_least64_t nb_frames_dup;
+    atomic_uint_least64_t nb_frames_drop;
 } OutputFilter;
 
 typedef struct FilterGraph {
@@ -736,10 +731,6 @@ int subtitle_wrap_frame(AVFrame *frame, AVSubtitle *subtitle, int copy);
  */
 FrameData *frame_data(AVFrame *frame);
 
-int ifilter_send_frame(InputFilter *ifilter, AVFrame *frame, int keep_reference);
-int ifilter_send_eof(InputFilter *ifilter, int64_t pts, AVRational tb);
-void ifilter_sub2video_heartbeat(InputFilter *ifilter, int64_t pts, AVRational tb);
-
 /**
  * Set up fallback filtering parameters from a decoder context. They will only
  * be used if no frames are ever sent on this input, otherwise the actual
@@ -760,25 +751,8 @@ int fg_create(FilterGraph **pfg, char *graph_desc, Scheduler *sch);
 
 void fg_free(FilterGraph **pfg);
 
-/**
- * Perform a step of transcoding for the specified filter graph.
- *
- * @param[in]  graph     filter graph to consider
- * @param[out] best_ist  input stream where a frame would allow to continue
- * @return  0 for success, <0 for error
- */
-int fg_transcode_step(FilterGraph *graph, InputStream **best_ist);
-
 void fg_send_command(FilterGraph *fg, double time, const char *target,
                      const char *command, const char *arg, int all_filters);
-
-/**
- * Get and encode new output from specified filtergraph, without causing
- * activity.
- *
- * @return  0 for success, <0 for severe errors
- */
-int reap_filters(FilterGraph *fg, int flush);
 
 int ffmpeg_parse_options(int argc, char **argv, Scheduler *sch);
 
