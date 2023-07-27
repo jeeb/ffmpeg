@@ -1190,7 +1190,8 @@ static int ost_add(Muxer *mux, const OptionsContext *o, enum AVMediaType type,
         if (!ost->enc_ctx)
             return AVERROR(ENOMEM);
 
-        ret = sch_add_enc(mux->sch, encoder_thread, ost, NULL);
+        ret = sch_add_enc(mux->sch, encoder_thread, ost,
+                          ost->type == AVMEDIA_TYPE_SUBTITLE ? NULL : enc_open);
         if (ret < 0)
             return ret;
         ms->sch_idx_enc = ret;
@@ -2631,23 +2632,6 @@ static int validate_enc_avopt(Muxer *mux, const AVDictionary *codec_avopt)
     return 0;
 }
 
-static int init_output_stream_nofilter(OutputStream *ost)
-{
-    int ret = 0;
-
-    if (ost->enc_ctx) {
-        ret = enc_open(ost, NULL);
-        if (ret < 0)
-            return ret;
-    } else {
-        ret = of_stream_init(output_files[ost->file_index], ost);
-        if (ret < 0)
-            return ret;
-    }
-
-    return ret;
-}
-
 static const char *output_file_item_name(void *obj)
 {
     const Muxer *mux = obj;
@@ -2833,26 +2817,15 @@ int of_open(const OptionsContext *o, const char *filename, Scheduler *sch)
 
     of->url        = filename;
 
-    /* initialize stream copy and subtitle/data streams.
-     * Encoded AVFrame based streams will get initialized when the first AVFrame
-     * is received in do_video_out
-     */
+    /* initialize streamcopy streams. */
     for (int i = 0; i < of->nb_streams; i++) {
         OutputStream *ost = of->streams[i];
 
-        if (ost->filter)
-            continue;
-
-        err = init_output_stream_nofilter(ost);
-        if (err < 0)
-            return err;
-    }
-
-    /* write the header for files with no streams */
-    if (of->format->flags & AVFMT_NOSTREAMS && oc->nb_streams == 0) {
-        int ret = mux_check_init(mux);
-        if (ret < 0)
-            return ret;
+        if (!ost->enc) {
+            err = of_stream_init(of, ost);
+            if (err < 0)
+                return err;
+        }
     }
 
     return 0;

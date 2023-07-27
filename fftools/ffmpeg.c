@@ -507,7 +507,7 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
     av_bprint_init(&buf, 0, AV_BPRINT_SIZE_AUTOMATIC);
     av_bprint_init(&buf_script, 0, AV_BPRINT_SIZE_AUTOMATIC);
     for (OutputStream *ost = ost_iter(NULL); ost; ost = ost_iter(ost)) {
-        const float q = ost->enc ? ost->quality / (float) FF_QP2LAMBDA : -1;
+        const float q = ost->enc ? atomic_load(&ost->quality) / (float) FF_QP2LAMBDA : -1;
 
         if (vid && ost->type == AVMEDIA_TYPE_VIDEO) {
             av_bprintf(&buf, "q=%2.1f ", q);
@@ -1158,7 +1158,6 @@ static int transcode(Scheduler *sch, int *err_rate_exceeded)
         } else if (err_rate)
             av_log(ist, AV_LOG_VERBOSE, "Decode error rate %g\n", err_rate);
     }
-    ret = err_merge(ret, enc_flush());
 
     term_exit();
 

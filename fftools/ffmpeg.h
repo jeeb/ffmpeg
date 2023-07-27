@@ -594,7 +594,7 @@ typedef struct OutputStream {
     uint64_t samples_encoded;
 
     /* packet quality factor */
-    int quality;
+    atomic_int quality;
 
     int sq_idx_encode;
     int sq_idx_mux;
@@ -784,10 +784,7 @@ int enc_alloc(Encoder **penc, const AVCodec *codec,
               Scheduler *sch, unsigned sch_idx);
 void enc_free(Encoder **penc);
 
-int enc_open(OutputStream *ost, const AVFrame *frame);
-int enc_subtitle(OutputFile *of, OutputStream *ost, const AVSubtitle *sub);
-int enc_frame(OutputStream *ost, AVFrame *frame);
-int enc_flush(void);
+int enc_open(void *opaque, const AVFrame *frame);
 
 /*
  * Initialize muxing state for the given stream, should be called
