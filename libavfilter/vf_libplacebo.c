@@ -29,6 +29,11 @@
 #include "vulkan_filter.h"
 #include "scale_eval.h"
 
+#include <libplacebo/config.h>
+
+#if PL_API_VER >= 309
+#include <libplacebo/options.h>
+#endif
 #include <libplacebo/renderer.h>
 #include <libplacebo/utils/libav.h>
 #include <libplacebo/utils/frame_queue.h>
@@ -188,6 +193,9 @@ typedef struct LibplaceboContext {
     int disable_builtin;
     int force_dither;
     int disable_fbos;
+#if PL_API_VER >= 309
+    AVDictionary *placebo_params;
+#endif
 
     /* pl_deband_params */
     struct pl_deband_params deband_params;
@@ -684,6 +692,36 @@ static int init_vulkan(AVFilterContext *avctx, const AVVulkanDeviceContext *hwct
         RET(av_file_map(s->shader_path, &buf, &buf_len, 0, s));
         RET(parse_shader(avctx, buf, buf_len));
     }
+
+#if PL_API_VER >= 309
+    {
+        pl_options opts = pl_options_alloc(s->log);
+        AVDictionaryEntry *en = NULL;
+        bool ret = false;
+
+        if (!opts) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to allocate pl_options!\n");
+            err = AVERROR(ENOMEM);
+            goto fail;
+        }
+
+        while (en = av_dict_get(s->placebo_params, "", en, AV_DICT_IGNORE_SUFFIX)) {
+           if (!(ret = pl_options_set_str(opts, en->key, en->value))) {
+               av_log(avctx, AV_LOG_WARNING,
+                      "Error parsing option '%s = %s'.\n",
+                       en->key, en->value);
+               err = AVERROR_EXTERNAL;
+           }
+        }
+
+        if (err)
+            goto fail;
+
+        // apply options
+
+        pl_options_free(&opts);
+    }
+#endif
 
     /* Initialize inputs */
     s->inputs = av_calloc(s->nb_inputs, sizeof(*s->inputs));
@@ -1464,6 +1502,9 @@ static const AVOption libplacebo_options[] = {
 #endif
     { "force_dither", "Force dithering", OFFSET(force_dither), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, DYNAMIC },
     { "disable_fbos", "Force-disable FBOs", OFFSET(disable_fbos), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, DYNAMIC },
+#if PL_API_VER >= 309
+    { "placebo-params", "Override configuration using a :-separated list of key=value parameters", OFFSET(placebo_params), AV_OPT_TYPE_DICT, { 0 }, 0, 0, STATIC },
+#endif
     { NULL },
 };
 
