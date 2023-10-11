@@ -720,3 +720,31 @@ int attribute_align_arg avcodec_receive_frame(AVCodecContext *avctx, AVFrame *fr
         return ff_decode_receive_frame(avctx, frame);
     return ff_encode_receive_frame(avctx, frame);
 }
+
+int avcodec_configure_side_data(AVCodecContext *avctx,
+                                const AVFrameSideDataSet *set,
+                                unsigned int flags)
+{
+    if (!avctx)
+        return AVERROR(EINVAL);
+
+    if (!set) {
+        av_frame_side_data_set_uninit(&avctx->frame_sd_set);
+        return 0;
+    }
+
+    if (set->nb_sd > 0 && set->nb_sd == avctx->frame_sd_set.nb_sd &&
+        set->sd == avctx->frame_sd_set.sd)
+        return AVERROR(EINVAL);
+
+    for (int i = 0; i < set->nb_sd; i++) {
+        int ret = av_frame_side_data_set_entry_from_sd(
+            &avctx->frame_sd_set, set->sd[i], flags);
+        if (ret < 0) {
+            av_frame_side_data_set_uninit(&avctx->frame_sd_set);
+            return ret;
+        }
+    }
+
+    return 0;
+}
