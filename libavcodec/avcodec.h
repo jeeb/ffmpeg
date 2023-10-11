@@ -3076,6 +3076,27 @@ void av_fast_padded_mallocz(void *ptr, unsigned int *size, size_t min_size);
 int avcodec_is_open(AVCodecContext *s);
 
 /**
+ * Add multiple side data entries to an AVCodecContext's array in one go, for
+ * example from an AVFrame.
+ *
+ * In case the function fails to add a side data entry, it will clear the
+ * whole side data set.
+ *
+ * @param avctx context to which the side data should be added
+ * @param sd    array of side data to use as input.
+ *              if null, clears out the side data for this context.
+ * @param nb_sd integer containing the number of entries in the array.
+ * @param flags Some combination of AV_FRAME_SIDE_DATA_SET_FLAG_* flags, or 0.
+ *
+ * @return negative error code on failure, >=0 on success.
+ *
+ * @see av_frame_side_data_new regarding the flags.
+ */
+int avcodec_configure_side_data(AVCodecContext *avctx,
+                                const AVFrameSideData **sd, const int nb_sd,
+                                unsigned int flags);
+
+/**
  * @}
  */
 

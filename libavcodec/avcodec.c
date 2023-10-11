@@ -686,3 +686,33 @@ int attribute_align_arg avcodec_receive_frame(AVCodecContext *avctx, AVFrame *fr
         return ff_decode_receive_frame(avctx, frame);
     return ff_encode_receive_frame(avctx, frame);
 }
+
+int avcodec_configure_side_data(AVCodecContext *avctx,
+                                const AVFrameSideData **sd, const int nb_sd,
+                                unsigned int flags)
+{
+    if (!avctx)
+        return AVERROR(EINVAL);
+
+    if (!sd) {
+        av_frame_side_data_free(
+            &avctx->frame_side_data, &avctx->nb_frame_side_data);
+        return 0;
+    }
+
+    if (nb_sd > 0 && nb_sd == avctx->nb_frame_side_data &&
+        sd == (const AVFrameSideData **)avctx->frame_side_data)
+        return AVERROR(EINVAL);
+
+    for (int i = 0; i < nb_sd; i++) {
+        int ret = av_frame_side_data_clone(
+            &avctx->frame_side_data, &avctx->nb_frame_side_data, sd[i], flags);
+        if (ret < 0) {
+            av_frame_side_data_free(
+                &avctx->frame_side_data, &avctx->nb_frame_side_data);
+            return ret;
+        }
+    }
+
+    return 0;
+}
