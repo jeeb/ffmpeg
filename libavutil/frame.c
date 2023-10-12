@@ -110,6 +110,24 @@ static void remove_side_data(AVFrameSideData ***sd, int *nb_side_data,
     }
 }
 
+static void remove_side_data_by_entry(AVFrameSideData ***sd,
+                                      int *nb_side_data,
+                                      const AVFrameSideData *target)
+{
+    for (int i = *nb_side_data - 1; i >= 0; i--) {
+        AVFrameSideData *entry = ((*sd)[i]);
+        if (entry != target)
+            continue;
+
+        free_side_data(&entry);
+
+        ((*sd)[i]) = ((*sd)[*nb_side_data - 1]);
+        (*nb_side_data)--;
+
+        return;
+    }
+}
+
 AVFrame *av_frame_alloc(void)
 {
     AVFrame *frame = av_malloc(sizeof(*frame));
@@ -877,6 +895,38 @@ AVFrameSideData *av_frame_side_data_set_new_entry(AVFrameSideDataSet *set,
         av_buffer_unref(&buf);
 
     return ret;
+}
+
+int av_frame_side_data_set_entry_from_sd(AVFrameSideDataSet *dst,
+                                         const AVFrameSideData *src,
+                                         unsigned int flags)
+{
+    if (!dst || !src)
+        return AVERROR(EINVAL);
+
+    {
+        AVBufferRef           *buf    = av_buffer_ref(src->buf);
+        AVFrameSideData       *sd_dst = NULL;
+
+        if (flags & AV_FRAME_SIDE_DATA_SET_FLAG_NO_DUPLICATES)
+            remove_side_data(&dst->sd, &dst->nb_sd, src->type);
+
+        sd_dst = add_side_data_to_set_from_buf(dst, src->type, buf);
+        if (!sd_dst) {
+            av_buffer_unref(&buf);
+            return AVERROR(ENOMEM);
+        }
+
+        {
+            int ret = av_dict_copy(&sd_dst->metadata, src->metadata, 0);
+            if (ret < 0) {
+                remove_side_data_by_entry(&dst->sd, &dst->nb_sd, sd_dst);
+                return ret;
+            }
+        }
+
+        return 0;
+    }
 }
 
 AVFrameSideData *av_frame_get_side_data(const AVFrame *frame,

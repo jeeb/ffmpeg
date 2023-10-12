@@ -1086,6 +1086,22 @@ AVFrameSideData *av_frame_side_data_set_new_entry(AVFrameSideDataSet *set,
                                                   unsigned int flags);
 
 /**
+ * Add a new side data entry to a set based on existing side data.
+ *
+ * @param dst a set to which the side data should be added
+ * @param src side data which should be added to the set
+ * @param flags Some combination of AV_FRAME_SIDE_DATA_SET_FLAG_* flags, or 0.
+ *
+ * @return negative error code on failure, >=0 on success. In case of
+ *         AV_FRAME_SIDE_DATA_SET_FLAG_NO_DUPLICATES being set, entries
+ *         of matching AVFrameSideDataType will be removed before the
+ *         addition is attempted.
+ */
+int av_frame_side_data_set_entry_from_sd(AVFrameSideDataSet *dst,
+                                         const AVFrameSideData *src,
+                                         unsigned int flags);
+
+/**
  * @}
  */
 
