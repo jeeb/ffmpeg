@@ -100,6 +100,24 @@ static void remove_side_data(AVFrameSideData ***sd, unsigned int *nb_side_data,
     }
 }
 
+static void remove_side_data_by_entry(AVFrameSideData ***sd,
+                                      unsigned int *nb_sd,
+                                      const AVFrameSideData *target)
+{
+    for (unsigned int i = *nb_sd - 1; i < UINT_MAX; i--) {
+        AVFrameSideData *entry = ((*sd)[i]);
+        if (entry != target)
+            continue;
+
+        free_side_data(&entry);
+
+        ((*sd)[i]) = ((*sd)[*nb_sd - 1]);
+        (*nb_sd)--;
+
+        return;
+    }
+}
+
 AVFrame *av_frame_alloc(void)
 {
     AVFrame *frame = av_malloc(sizeof(*frame));
@@ -766,6 +784,38 @@ AVFrameSideData *av_frame_side_data_new(AVFrameSideData ***sd,
         av_buffer_unref(&buf);
 
     return ret;
+}
+
+int av_frame_side_data_clone(AVFrameSideData ***sd, unsigned int *nb_sd,
+                             const AVFrameSideData *src, unsigned int flags)
+{
+    AVBufferRef     *buf    = NULL;
+    AVFrameSideData *sd_dst = NULL;
+    int              ret    = AVERROR_BUG;
+
+    if (!sd || !src || !nb_sd || (*nb_sd && !*sd))
+        return AVERROR(EINVAL);
+
+    buf = av_buffer_ref(src->buf);
+    if (!buf)
+        return AVERROR(ENOMEM);
+
+    if (flags & AV_FRAME_SIDE_DATA_FLAG_UNIQUE)
+        remove_side_data(sd, nb_sd, src->type);
+
+    sd_dst = add_side_data_from_buf(sd, nb_sd, src->type, buf);
+    if (!sd_dst) {
+        av_buffer_unref(&buf);
+        return AVERROR(ENOMEM);
+    }
+
+    ret = av_dict_copy(&sd_dst->metadata, src->metadata, 0);
+    if (ret < 0) {
+        remove_side_data_by_entry(sd, nb_sd, sd_dst);
+        return ret;
+    }
+
+    return 0;
 }
 
 AVFrameSideData *av_frame_get_side_data(const AVFrame *frame,
