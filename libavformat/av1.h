@@ -55,6 +55,9 @@ typedef struct AV1SequenceParameters {
  *         code in case of failure
  * @note   One can use NULL for pb to just get the output size.
  */
+#ifdef CALLED_FROM_AVCODEC
+static
+#endif
 int ff_av1_filter_obus(AVIOContext *pb, const uint8_t *buf, int size);
 
 /**
@@ -74,6 +77,9 @@ int ff_av1_filter_obus(AVIOContext *pb, const uint8_t *buf, int size);
  *         On failure, *out and *size are unchanged
  * @note *out will be treated as unintialized on input and will not be freed.
  */
+#ifdef CALLED_FROM_AVCODEC
+static
+#endif
 int ff_av1_filter_obus_buf(const uint8_t *in, uint8_t **out,
                            int *size, int *offset);
 
@@ -87,6 +93,9 @@ int ff_av1_filter_obus_buf(const uint8_t *in, uint8_t **out,
  *
  * @return >= 0 in case of success, a negative AVERROR code in case of failure
  */
+#ifdef CALLED_FROM_AVCODEC
+static
+#endif
 int ff_av1_parse_seq_header(AV1SequenceParameters *seq, const uint8_t *buf, int size);
 
 /**
@@ -101,6 +110,9 @@ int ff_av1_parse_seq_header(AV1SequenceParameters *seq, const uint8_t *buf, int 
  *
  * @return >= 0 in case of success, a negative AVERROR code in case of failure
  */
+#ifdef CALLED_FROM_AVCODEC
+static
+#endif
 int ff_isom_write_av1c(AVIOContext *pb, const uint8_t *buf, int size, int write_seq_header);
 
 #endif /* AVFORMAT_AV1_H */

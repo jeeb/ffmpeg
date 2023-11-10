@@ -79,11 +79,17 @@ static int av1_filter_obus(AVIOContext *pb, const uint8_t *buf,
     return size;
 }
 
+#ifdef CALLED_FROM_AVCODEC
+static
+#endif
 int ff_av1_filter_obus(AVIOContext *pb, const uint8_t *buf, int size)
 {
     return av1_filter_obus(pb, buf, size, NULL);
 }
 
+#ifdef CALLED_FROM_AVCODEC
+static
+#endif
 int ff_av1_filter_obus_buf(const uint8_t *in, uint8_t **out,
                            int *size, int *offset)
 {
@@ -332,6 +338,9 @@ static int parse_sequence_header(AV1SequenceParameters *seq_params, const uint8_
     return 0;
 }
 
+#ifdef CALLED_FROM_AVCODEC
+static
+#endif
 int ff_av1_parse_seq_header(AV1SequenceParameters *seq, const uint8_t *buf, int size)
 {
     int is_av1c;
@@ -395,6 +404,9 @@ int ff_av1_parse_seq_header(AV1SequenceParameters *seq, const uint8_t *buf, int 
     return is_av1c ? 0 : AVERROR_INVALIDDATA;
 }
 
+#ifdef CALLED_FROM_AVCODEC
+static
+#endif
 int ff_isom_write_av1c(AVIOContext *pb, const uint8_t *buf, int size,
                        int write_seq_header)
 {
