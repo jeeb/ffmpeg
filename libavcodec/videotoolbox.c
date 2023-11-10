@@ -55,6 +55,10 @@ enum { kCMVideoCodecType_HEVC = 'hvc1' };
 enum { kCMVideoCodecType_VP9 = 'vp09' };
 #endif
 
+#if !HAVE_KCMVIDEOCODECTYPE_AV1
+enum { kCMVideoCodecType_AV1 = 'av01' };
+#endif
+
 #define VIDEOTOOLBOX_ESDS_EXTRADATA_PADDING  12
 
 typedef struct VTHWFrame {
@@ -846,6 +850,13 @@ static CFDictionaryRef videotoolbox_decoder_config_create(CMVideoCodecType codec
             CFDictionarySetValue(avc_info, CFSTR("vpcC"), data);
         break;
 #endif
+#if CONFIG_AV1_VIDEOTOOLBOX_HWACCEL
+    case kCMVideoCodecType_AV1 :
+        data = ff_videotoolbox_av1c_extradata_create(avctx);
+        if (data)
+            CFDictionarySetValue(avc_info, CFSTR("av1C"), data);
+        break;
+#endif
     default:
         break;
     }
@@ -910,6 +921,9 @@ static int videotoolbox_start(AVCodecContext *avctx)
         break;
     case AV_CODEC_ID_VP9 :
         videotoolbox->cm_codec_type = kCMVideoCodecType_VP9;
+        break;
+    case AV_CODEC_ID_AV1 :
+        videotoolbox->cm_codec_type = kCMVideoCodecType_AV1;
         break;
     default :
         break;
