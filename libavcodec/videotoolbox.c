@@ -853,8 +853,18 @@ static CFDictionaryRef videotoolbox_decoder_config_create(CMVideoCodecType codec
 #if CONFIG_AV1_VIDEOTOOLBOX_HWACCEL
     case kCMVideoCodecType_AV1 :
         data = ff_videotoolbox_av1c_extradata_create(avctx);
-        if (data)
+        if (data) {
+            const uint64_t size = (uint64_t)CFDataGetLength(data);
+            const uint8_t  *buf = CFDataGetBytePtr(data);
+            av_log(avctx, AV_LOG_VERBOSE,
+                   "avc1C: size: %"PRId64", first bytes: %02x %02x %02x %02x\n",
+                   size,
+                   size > 0 ? buf[0] : 0,
+                   size > 1 ? buf[1] : 0,
+                   size > 2 ? buf[2] : 0,
+                   size > 3 ? buf[3] : 0);
             CFDictionarySetValue(avc_info, CFSTR("av1C"), data);
+        }
         break;
 #endif
     default:
