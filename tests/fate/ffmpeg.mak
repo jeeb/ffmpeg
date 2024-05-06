@@ -161,7 +161,7 @@ FATE_STREAMCOPY-$(call TRANSCODE, RAWVIDEO APNG, APNG) += fate-copy-apng
 endif
 fate-copy-apng: fate-lavf-apng
 fate-lavf-apng: KEEP_FILES ?= 1
-fate-copy-apng: CMD = transcode apng tests/data/lavf/lavf.apng apng "-c:v copy"
+fate-copy-apng: CMD = stream_remux apng tests/data/lavf/lavf.apng "" apng
 
 FATE_STREAMCOPY-$(call DEMMUX, OGG, OGG) += fate-limited_input_seek fate-limited_input_seek-copyts
 fate-limited_input_seek: CMD = md5 -ss 1.5 -t 1.3 -i $(TARGET_SAMPLES)/vorbis/moog_small.ogg -c:a copy -fflags +bitexact -f ogg
