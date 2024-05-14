@@ -73,8 +73,10 @@ static int32_t read_int(const char* line, const char** endptr, int* error)
 {
     unsigned long result = 0;
     for (; *line>='0' && *line<='9'; line++) {
-        if (result > (INT32_MAX - 9) / 10)
+        if (result > (INT32_MAX - 9) / 10) {
             *error = -1;
+            break;
+        }
         result = 10 * result + *line - '0';
     }
     *endptr = line;
