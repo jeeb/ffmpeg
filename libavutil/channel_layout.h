@@ -79,6 +79,8 @@ enum AVChannel {
     AV_CHAN_BOTTOM_FRONT_CENTER,
     AV_CHAN_BOTTOM_FRONT_LEFT,
     AV_CHAN_BOTTOM_FRONT_RIGHT,
+    AV_CHAN_SURROUND_LEFT,
+    AV_CHAN_SURROUND_RIGHT,
 
     /** Channel is empty can be safely skipped. */
     AV_CHAN_UNUSED = 0x200,
