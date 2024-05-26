@@ -47,17 +47,17 @@
 enum AVChannel {
     ///< Invalid channel index
     AV_CHAN_NONE = -1,
-    AV_CHAN_FRONT_LEFT,
-    AV_CHAN_FRONT_RIGHT,
-    AV_CHAN_FRONT_CENTER,
-    AV_CHAN_LOW_FREQUENCY,
-    AV_CHAN_BACK_LEFT,
-    AV_CHAN_BACK_RIGHT,
+    AV_CHAN_FRONT_LEFT,    ///< +30 degrees, L|FL|
+    AV_CHAN_FRONT_RIGHT,   ///< -30 degrees, R|FR|
+    AV_CHAN_FRONT_CENTER,  ///< +0 degrees, C|FC|
+    AV_CHAN_LOW_FREQUENCY, ///< +60 degrees, LFE|LFE1|
+    AV_CHAN_BACK_LEFT,  ///< +135 degrees, Lsr|BL|kAudioChannelLabel_RearSurroundLeft
+    AV_CHAN_BACK_RIGHT, ///< -135 degrees, Rsr|BR|kAudioChannelLabel_RearSurroundRight
     AV_CHAN_FRONT_LEFT_OF_CENTER,
     AV_CHAN_FRONT_RIGHT_OF_CENTER,
     AV_CHAN_BACK_CENTER,
-    AV_CHAN_SIDE_LEFT,
-    AV_CHAN_SIDE_RIGHT,
+    AV_CHAN_SIDE_LEFT,  ///< +110 degrees, Ls|LS|kAudioChannelLabel_LeftSurround
+    AV_CHAN_SIDE_RIGHT, ///< -110 degrees, Rs|RS|kAudioChannelLabel_RightSurround
     AV_CHAN_TOP_CENTER,
     AV_CHAN_TOP_FRONT_LEFT,
     AV_CHAN_TOP_FRONT_CENTER,
@@ -69,8 +69,8 @@ enum AVChannel {
     AV_CHAN_STEREO_LEFT = 29,
     /** See above. */
     AV_CHAN_STEREO_RIGHT,
-    AV_CHAN_WIDE_LEFT,
-    AV_CHAN_WIDE_RIGHT,
+    AV_CHAN_WIDE_LEFT,  ///< +60 degrees, Lw|FLw|kAudioChannelLabel_LeftWide
+    AV_CHAN_WIDE_RIGHT, ///< -60 degrees, Rw|FRw|kAudioChannelLabel_RightWide
     AV_CHAN_SURROUND_DIRECT_LEFT,
     AV_CHAN_SURROUND_DIRECT_RIGHT,
     AV_CHAN_LOW_FREQUENCY_2,
